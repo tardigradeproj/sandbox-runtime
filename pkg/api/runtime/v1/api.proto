@@ -18,6 +18,32 @@ package runtime.v1;
 
 option go_package = "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1;v1";
 
+// RuntimeService defines the public APIs for managing sandbox lifecycle. It
+// is the SRI analog of CRI's RuntimeService, pared down to the basics.
+service RuntimeService {
+  // Version returns the runtime name, runtime version, and runtime API
+  // version.
+  rpc Version(VersionRequest) returns (VersionResponse) {}
+
+  // RunSandbox creates and starts a sandbox.
+  rpc RunSandbox(RunSandboxRequest) returns (RunSandboxResponse) {}
+
+  // StopSandbox stops a running sandbox. It is a no-op if the sandbox is
+  // already stopped.
+  rpc StopSandbox(StopSandboxRequest) returns (StopSandboxResponse) {}
+
+  // RemoveSandbox removes a sandbox, stopping it first if it is still
+  // running.
+  rpc RemoveSandbox(RemoveSandboxRequest) returns (RemoveSandboxResponse) {}
+
+  // ListSandbox lists sandboxes known to the runtime, optionally narrowed by
+  // filter.
+  rpc ListSandbox(ListSandboxRequest) returns (ListSandboxResponse) {}
+
+  // SandboxStatus returns the status of the sandbox identified by id.
+  rpc SandboxStatus(SandboxStatusRequest) returns (SandboxStatusResponse) {}
+}
+
 // RootFSService defines the public APIs for managing sandbox root
 // filesystems. It is the SRI analog of CRI's ImageService.
 service RootFSService {
@@ -124,3 +150,178 @@ message RemoveRootFSRequest {
 }
 
 message RemoveRootFSResponse {}
+
+message VersionRequest {
+  // Version of the sandbox runtime API that the client supports.
+  string version = 1;
+}
+
+message VersionResponse {
+  // Version of the sandbox runtime API.
+  string version = 1;
+
+  // RuntimeName is the name of the runtime, e.g. "firecracker".
+  string runtime_name = 2;
+
+  // RuntimeVersion is the version of the runtime. The string must be
+  // semver-compatible.
+  string runtime_version = 3;
+
+  // RuntimeApiVersion is the API version implemented by the runtime. The
+  // string must be semver-compatible.
+  string runtime_api_version = 4;
+}
+
+// SandboxMetadata identifies a sandbox for the purposes of logging and
+// debugging.
+message SandboxMetadata {
+  // Name is a human-readable identifier for the sandbox. It need not be
+  // unique.
+  string name = 1;
+
+  // Uid is a unique, caller-assigned identifier for the sandbox.
+  string uid = 2;
+}
+
+// SandboxResources describes the resources to reserve for a sandbox.
+message SandboxResources {
+  // CPU, in fractional cores (e.g. 0.5 is half a core). <= 0 means
+  // unconstrained.
+  double cpu = 1;
+
+  // MemoryBytes is the memory limit, in bytes. <= 0 means unconstrained.
+  int64 memory_bytes = 2;
+}
+
+// RootFSMount describes how a rootfs is attached to a sandbox as a block
+// device. Field names and semantics follow Firecracker's Drive model, the
+// first runtime this API targets.
+message RootFSMount {
+  // Spec identifies the rootfs to attach. It must already be present
+  // locally (see RootFSService.PullRootFS).
+  RootFSSpec spec = 1;
+
+  // IsReadOnly mounts the rootfs read-only.
+  bool is_read_only = 2;
+
+  // IsRootDevice marks this as the root block device the guest kernel
+  // boots from (i.e. it is referenced by the kernel command line's "root="
+  // argument).
+  bool is_root_device = 3;
+
+  // Partuuid is the unique partition identifier of the boot partition on
+  // this drive. When set, it takes precedence over device-index-based
+  // root device lookup.
+  string partuuid = 4;
+}
+
+// BootConfig describes how to boot a sandbox's guest kernel. Field names
+// and semantics follow Firecracker's BootSource model, the first runtime
+// this API targets.
+message BootConfig {
+  // KernelImagePath is the path to the uncompressed guest kernel image.
+  string kernel_image_path = 1;
+
+  // InitrdPath is the path to the initrd, if any.
+  string initrd_path = 2;
+
+  // BootArgs is the kernel command line, e.g.
+  // "console=ttyS0 reboot=k panic=1 pci=off".
+  string boot_args = 3;
+}
+
+// SandboxConfig describes a sandbox to be created.
+message SandboxConfig {
+  SandboxMetadata metadata = 1;
+
+  // RootFS describes the root filesystem the sandbox should be launched
+  // with and how it is attached.
+  RootFSMount rootfs = 2;
+
+  // Boot describes how to boot the sandbox's guest kernel.
+  BootConfig boot = 3;
+
+  // Resources are the resources to reserve for the sandbox, allocated when
+  // the sandbox is run.
+  SandboxResources resources = 4;
+
+  map<string, string> labels = 5;
+  map<string, string> annotations = 6;
+}
+
+// SandboxState is the lifecycle state of a sandbox.
+enum SandboxState {
+  SANDBOX_UNKNOWN = 0;
+  SANDBOX_READY = 1;
+  SANDBOX_NOT_READY = 2;
+}
+
+// Sandbox is a sandbox known to the runtime.
+message Sandbox {
+  // ID is the identifier assigned by the runtime when the sandbox was
+  // created.
+  string id = 1;
+
+  SandboxMetadata metadata = 2;
+  SandboxState state = 3;
+
+  // CreatedAt is a Unix timestamp, in nanoseconds.
+  int64 created_at = 4;
+
+  // Resources are the resources actually allocated to the sandbox.
+  SandboxResources resources = 5;
+
+  map<string, string> labels = 6;
+  map<string, string> annotations = 7;
+}
+
+message RunSandboxRequest {
+  SandboxConfig config = 1;
+}
+
+message RunSandboxResponse {
+  string sandbox_id = 1;
+}
+
+message StopSandboxRequest {
+  string sandbox_id = 1;
+}
+
+message StopSandboxResponse {}
+
+message RemoveSandboxRequest {
+  string sandbox_id = 1;
+}
+
+message RemoveSandboxResponse {}
+
+// SandboxFilter narrows a ListSandbox call.
+message SandboxFilter {
+  string id = 1;
+  SandboxState state = 2;
+  map<string, string> label_selector = 3;
+}
+
+message ListSandboxRequest {
+  SandboxFilter filter = 1;
+}
+
+message ListSandboxResponse {
+  repeated Sandbox sandbox = 1;
+}
+
+message SandboxStatusRequest {
+  string sandbox_id = 1;
+
+  // Verbose, when true, asks the runtime to populate info with extra,
+  // runtime-specific status.
+  bool verbose = 2;
+}
+
+message SandboxStatusResponse {
+  Sandbox sandbox = 1;
+
+  // Info holds extra, runtime-specific info. Only populated when the
+  // request set verbose = true.
+  map<string, string> info = 2;
+}
