@@ -1,0 +1,126 @@
+// Copyright 2026 The Tardigrade Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+syntax = "proto3";
+package runtime.v1;
+
+option go_package = "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1;v1";
+
+// RootFSService defines the public APIs for managing sandbox root
+// filesystems. It is the SRI analog of CRI's ImageService.
+service RootFSService {
+  // ListRootFS lists the rootfs images known to the runtime, optionally
+  // narrowed by filter.
+  rpc ListRootFS(ListRootFSRequest) returns (ListRootFSResponse) {}
+
+  // RootFSStatus returns the status of the rootfs identified by spec, if it
+  // exists locally.
+  rpc RootFSStatus(RootFSStatusRequest) returns (RootFSStatusResponse) {}
+
+  // PullRootFS fetches a rootfs (e.g. from an OCI registry or a template
+  // catalog) and stores it locally so it can be used to launch a sandbox.
+  rpc PullRootFS(PullRootFSRequest) returns (PullRootFSResponse) {}
+
+  // RemoveRootFS removes a rootfs from local storage.
+  rpc RemoveRootFS(RemoveRootFSRequest) returns (RemoveRootFSResponse) {}
+}
+
+// RootFSSpec identifies a rootfs the caller wants to resolve, pull, or
+// remove.
+message RootFSSpec {
+  // Reference to the rootfs, e.g. "docker.io/library/alpine:3.19",
+  // a content digest, or a runtime-specific template name/URI.
+  string image = 1;
+
+  // Annotations carried through from the sandbox request, for runtimes that
+  // key rootfs resolution on more than just the reference.
+  map<string, string> annotations = 2;
+}
+
+// RootFS is a rootfs known to the runtime.
+message RootFS {
+  // ID is the identifier assigned by the runtime, e.g. a content digest.
+  string id = 1;
+
+  // RepoTags are the reference names (tags/URIs) that resolve to this
+  // rootfs.
+  repeated string repo_tags = 2;
+
+  // RepoDigests are the content digests associated with this rootfs.
+  repeated string repo_digests = 3;
+
+  // Size is the size of the rootfs on disk, in bytes.
+  uint64 size = 4;
+
+  // Spec is the spec that was used to pull this rootfs, if known.
+  RootFSSpec spec = 5;
+}
+
+// RootFSFilter narrows a ListRootFS call.
+message RootFSFilter {
+  RootFSSpec spec = 1;
+}
+
+message ListRootFSRequest {
+  RootFSFilter filter = 1;
+}
+
+message ListRootFSResponse {
+  repeated RootFS rootfs = 1;
+}
+
+message RootFSStatusRequest {
+  RootFSSpec spec = 1;
+
+  // Verbose, when true, asks the runtime to populate info with extra,
+  // runtime-specific status.
+  bool verbose = 2;
+}
+
+message RootFSStatusResponse {
+  RootFS rootfs = 1;
+
+  // Info holds extra, runtime-specific info. Only populated when the
+  // request set verbose = true.
+  map<string, string> info = 2;
+}
+
+// AuthConfig carries credentials for pulling a rootfs from a private
+// source. Mirrors CRI's AuthConfig.
+message AuthConfig {
+  string username = 1;
+  string password = 2;
+  string auth = 3;
+  string server_address = 4;
+  string identity_token = 5;
+  string registry_token = 6;
+}
+
+message PullRootFSRequest {
+  RootFSSpec spec = 1;
+  AuthConfig auth = 2;
+}
+
+message PullRootFSResponse {
+  // RootFSRef is the reference by which the pulled rootfs can be identified
+  // in later calls.
+  string rootfs_ref = 1;
+}
+
+message RemoveRootFSRequest {
+  RootFSSpec spec = 1;
+}
+
+message RemoveRootFSResponse {}
