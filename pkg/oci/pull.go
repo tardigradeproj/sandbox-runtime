@@ -22,32 +22,26 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	ggcrv1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 // ErrInvalidReference distinguishes a bad image reference (caller
 // mistake) from a registry-side failure.
 var ErrInvalidReference = errors.New("oci: invalid image reference")
 
-func PullImage(ctx context.Context, image string, opts ...remote.Option) (ggcrv1.Image, error) {
-	ref, err := name.ParseReference(image)
-	if err != nil {
+func PullImage(ctx context.Context, image string, opts ...crane.Option) (ggcrv1.Image, error) {
+	if _, err := name.ParseReference(image); err != nil {
 		return nil, fmt.Errorf("%w: %q: %v", ErrInvalidReference, image, err)
 	}
 
-	allOpts := append([]remote.Option{remote.WithContext(ctx), remote.WithPlatform(hostPlatform())}, opts...)
-	desc, err := remote.Get(ref, allOpts...)
+	platform := hostPlatform()
+	allOpts := append([]crane.Option{crane.WithContext(ctx), crane.WithPlatform(&platform)}, opts...)
+	img, err := crane.Pull(image, allOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pull manifest for %q: %w", image, err)
 	}
-
-	img, err := desc.Image()
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve image for %q: %w", image, err)
-	}
-
 	return img, nil
 }
 
