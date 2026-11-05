@@ -41,8 +41,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/ext4"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/store"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/ext4"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 )
 
 // fakePacker stands in for mkfs.ext4: on success it writes a placeholder

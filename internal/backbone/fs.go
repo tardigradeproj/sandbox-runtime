@@ -24,14 +24,14 @@ import (
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/store"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/ext4"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/oci"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/rootfs"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/ext4"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/oci"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/rootfs"
 )
 
 // RootFS implements v1.RootFSServiceServer.
