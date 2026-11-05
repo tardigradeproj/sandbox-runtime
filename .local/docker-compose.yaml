@@ -1,0 +1,15 @@
+name: heir-dev
+
+x-integration: &integration
+  build:
+    context: .
+    dockerfile: Dockerfile
+  working_dir: /src
+  volumes:
+    - ..:/src
+
+services:
+  integration:
+    <<: *integration
+    container_name: heir-dev-integration
+    command: ["sh", "-c", "go test ./... -tags=integration -v; echo \"exit code: $?\"; sleep infinity"]

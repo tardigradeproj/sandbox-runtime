@@ -10,7 +10,7 @@
 
 # Test binary, built with `go test -c`
 *.test
-
+.idea
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
@@ -31,3 +31,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local notes
+/1.md
+/2.md
+/3.md
+/mknod.md
