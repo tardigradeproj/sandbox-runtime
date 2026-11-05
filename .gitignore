@@ -31,3 +31,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local notes
+/1.md
+/2.md
+/3.md
+/mknod.md
