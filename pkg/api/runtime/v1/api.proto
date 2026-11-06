@@ -123,20 +123,8 @@ message RootFSStatusResponse {
   map<string, string> info = 2;
 }
 
-// AuthConfig carries credentials for pulling a rootfs from a private
-// source. Mirrors CRI's AuthConfig.
-message AuthConfig {
-  string username = 1;
-  string password = 2;
-  string auth = 3;
-  string server_address = 4;
-  string identity_token = 5;
-  string registry_token = 6;
-}
-
 message PullRootFSRequest {
   RootFSSpec spec = 1;
-  AuthConfig auth = 2;
 }
 
 message PullRootFSResponse {

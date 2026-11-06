@@ -20,8 +20,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
@@ -113,7 +111,7 @@ func (r *RootFS) PullRootFS(ctx context.Context, req *v1.PullRootFSRequest) (*v1
 		return nil, status.Error(codes.InvalidArgument, "spec.image must be set")
 	}
 
-	img, err := oci.PullImage(ctx, image, authOption(req.GetAuth()))
+	img, err := oci.PullImage(ctx, image)
 	if err != nil {
 		if errors.Is(err, oci.ErrInvalidReference) {
 			return nil, status.Errorf(codes.InvalidArgument, "pull rootfs: %v", err)
@@ -225,23 +223,6 @@ func repoRefs(image, digestStr string) (repoTag, repoDigest string) {
 		repoTag = t.Name()
 	}
 	return repoTag, ref.Context().Digest(digestStr).Name()
-}
-
-// authOption maps a PullRootFSRequest's AuthConfig onto a crane.Option,
-// falling back to the default keychain when auth carries no
-// credentials (which is also crane's own default).
-func authOption(auth *v1.AuthConfig) crane.Option {
-	if auth == nil || (auth.GetUsername() == "" && auth.GetPassword() == "" && auth.GetAuth() == "" &&
-		auth.GetIdentityToken() == "" && auth.GetRegistryToken() == "") {
-		return crane.WithAuthFromKeychain(authn.DefaultKeychain)
-	}
-	return crane.WithAuth(authn.FromConfig(authn.AuthConfig{
-		Username:      auth.GetUsername(),
-		Password:      auth.GetPassword(),
-		Auth:          auth.GetAuth(),
-		IdentityToken: auth.GetIdentityToken(),
-		RegistryToken: auth.GetRegistryToken(),
-	}))
 }
 
 // pullError maps a registry-side pull failure to an appropriate gRPC
