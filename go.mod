@@ -4,6 +4,7 @@ go 1.26.7
 
 require (
 	github.com/google/go-containerregistry v0.22.1
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/sys v0.48.0
 	google.golang.org/grpc v1.85.0
