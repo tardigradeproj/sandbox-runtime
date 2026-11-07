@@ -1,12 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/tardigradeproj/sandbox-runtime/internal/config"
+	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/observability"
 )
 
 func main() {
@@ -22,16 +23,22 @@ func newRootCmd() *cobra.Command {
 		Use:   "sandbox-runtime",
 		Short: "sandbox-runtime runs the Firecracker-backed sandbox runtime daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configPath)
+			cfg, err := cfg.Load(configPath)
 			if err != nil {
 				return err
 			}
 
-			fmt.Printf("loaded config from %s\n", configPath)
-			fmt.Printf("  rootfs:          %s\n", cfg.Rootfs)
-			fmt.Printf("  version:         %s\n", cfg.Version)
-			fmt.Printf("  grpc listen:     %s\n", cfg.GRPC.ListenAddress)
-			fmt.Printf("  firecracker bin: %s\n", cfg.Runtime.Firecracker.Bin)
+			if err := observability.ConfigureLogging(cfg.Logs.Level, cfg.Logs.Format); err != nil {
+				return err
+			}
+
+			logrus.Infof("loaded config from %s", configPath)
+			logrus.WithFields(logrus.Fields{
+				"rootfs":          cfg.Rootfs,
+				"version":         cfg.Version,
+				"grpc_listen":     cfg.GRPC.ListenAddress,
+				"firecracker_bin": cfg.Runtime.Firecracker.Bin,
+			}).Info("runtime configuration")
 			return nil
 		},
 	}
