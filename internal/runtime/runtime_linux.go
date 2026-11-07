@@ -27,6 +27,7 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/cleanup"
+	obs "github.com/tardigradeproj/sandbox-runtime/pkg/observability"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -41,6 +42,7 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	if sandboxID == "" {
 		return nil, status.Error(codes.InvalidArgument, "config.metadata.uid must be set")
 	}
+	log := logrus.WithField(obs.SandboxID, sandboxID)
 
 	storageBytes := config.GetResources().GetStorageBytes()
 	if storageBytes <= 0 {
@@ -56,8 +58,11 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	if image == "" {
 		return nil, status.Error(codes.InvalidArgument, "config.rootfs.spec.image must be set")
 	}
+	log.WithField(obs.SandboxImage, image).Info("creating sandbox")
+
 	entry, ok, err := r.store.Resolve(image)
 	if err != nil {
+		log.WithError(err).Error("create sandbox: failed to resolve rootfs")
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 	if !ok {
@@ -65,25 +70,28 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	}
 	rootfsPath, err := r.store.ImagePath(entry.Digest)
 	if err != nil {
+		log.WithError(err).Error("create sandbox: failed to resolve rootfs image path")
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 
 	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
 	if err := os.MkdirAll(sandboxDir, 0o755); err != nil {
+		log.WithError(err).Error("create sandbox: failed to create sandbox dir")
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 	cu := cleanup.Make(func() {
 		if err := os.RemoveAll(sandboxDir); err != nil {
-			logrus.WithError(err).WithField("sandbox_id", sandboxID).
-				Warn("create sandbox: cleanup: failed to remove sandbox dir")
+			log.WithError(err).Warn("create sandbox: cleanup: failed to remove sandbox dir")
 		}
 	})
 	defer cu.Clean()
 
 	scratchPath := filepath.Join(sandboxDir, "rootfs.ext4")
 	if err := createScratchImage(ctx, scratchPath, storageBytes); err != nil {
+		log.WithError(err).Error("create sandbox: failed to create scratch image")
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
+	log.WithField(obs.ScratchPath, scratchPath).Debug("create sandbox: scratch overlay created")
 
 	fc := r.cfg.Runtime.Firecracker
 
@@ -139,12 +147,12 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 
 	machine, err := firecracker.NewMachine(ctx, machineCfg, firecracker.WithProcessRunner(cmd))
 	if err != nil {
+		log.WithError(err).Error("create sandbox: failed to build firecracker machine config")
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 	cu.Add(func() {
 		if err := machine.StopVMM(); err != nil {
-			logrus.WithError(err).WithField("sandbox_id", sandboxID).
-				Warn("create sandbox: cleanup: failed to stop vmm")
+			log.WithError(err).Warn("create sandbox: cleanup: failed to stop vmm")
 		}
 	})
 
@@ -152,11 +160,18 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	// firecracker process (equivalent to `firecracker --api-sock
 	// <socketPath>`) and configures it over the API, but stop short of
 	// Start's final step, which sends the InstanceStart action.
+	log.WithField(obs.SocketPath, socketPath).Debug("create sandbox: spawning firecracker process")
 	if err := machine.Handlers.Run(ctx, machine); err != nil {
+		log.WithError(err).Error("create sandbox: failed to spawn/configure firecracker")
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 
 	cu.Release()
+	log.WithFields(logrus.Fields{
+		obs.RootfsPath:  rootfsPath,
+		obs.ScratchPath: scratchPath,
+		obs.SocketPath:  socketPath,
+	}).Info("sandbox created")
 	return &v1.CreateSandboxResponse{SandboxId: sandboxID}, nil
 }
 

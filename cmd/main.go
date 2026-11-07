@@ -34,10 +34,10 @@ func newRootCmd() *cobra.Command {
 
 			logrus.Infof("loaded config from %s", configPath)
 			logrus.WithFields(logrus.Fields{
-				"rootfs":          cfg.Rootfs,
-				"version":         cfg.Version,
-				"grpc_listen":     cfg.GRPC.ListenAddress,
-				"firecracker_bin": cfg.Runtime.Firecracker.Bin,
+				observability.ConfigRootfs:      cfg.Rootfs,
+				observability.ConfigVersion:     cfg.Version,
+				observability.GRPCListenAddress: cfg.GRPC.ListenAddress,
+				observability.FirecrackerBin:    cfg.Runtime.Firecracker.Bin,
 			}).Info("runtime configuration")
 			return nil
 		},
