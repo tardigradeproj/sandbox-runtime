@@ -45,5 +45,9 @@ func newRootCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
 
+	// TEMPORARY: manual-testing subcommands, remove before merging.
+	cmd.AddCommand(newValidatePullCmd())
+	cmd.AddCommand(newValidateCreateSandboxCmd())
+
 	return cmd
 }
