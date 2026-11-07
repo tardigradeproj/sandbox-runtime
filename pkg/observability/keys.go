@@ -7,6 +7,7 @@ const (
 	SandboxImage = "sandbox.image"
 	ScratchPath  = "sandbox.scratch_path"
 	SocketPath   = "sandbox.socket_path"
+	LogPath      = "sandbox.log_path"
 
 	RootfsImage  = "rootfs.image"
 	RootfsDigest = "rootfs.digest"

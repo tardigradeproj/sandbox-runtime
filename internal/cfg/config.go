@@ -53,10 +53,11 @@ type Firecracker struct {
 	Log             FirecrackerLog `toml:"log"`
 }
 
-// FirecrackerLog configures firecracker's own logger.
+// FirecrackerLog configures firecracker's own logger. LogPath isn't
+// configurable here: each sandbox's log lives within its own state
+// dir (see CreateSandbox), not a shared path.
 type FirecrackerLog struct {
 	Level         string `toml:"level" default:"Info"`
-	LogPath       string `toml:"log_path" default:"/var/log/sandbox-runtime/firecracker.log"`
 	ShowLevel     *bool  `toml:"show_level" default:"true"`
 	ShowLogOrigin *bool  `toml:"show_log_origin" default:"false"`
 }

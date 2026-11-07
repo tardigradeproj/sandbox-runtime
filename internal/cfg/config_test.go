@@ -73,7 +73,6 @@ default_boot_args = "console=ttyS0 reboot=k panic=1 pci=off"
 
 [runtime.firecracker.log]
 level = "Info"
-log_path = "/var/log/sandbox-runtime/firecracker.log"
 show_level = true
 show_log_origin = false
 `)
@@ -98,7 +97,6 @@ show_log_origin = false
 			DefaultBootArgs: "console=ttyS0 reboot=k panic=1 pci=off",
 			Log: FirecrackerLog{
 				Level:         "Info",
-				LogPath:       "/var/log/sandbox-runtime/firecracker.log",
 				ShowLevel:     boolPtr(true),
 				ShowLogOrigin: boolPtr(false),
 			},
@@ -135,7 +133,6 @@ func TestLoadAppliesDefaults(t *testing.T) {
 			DefaultBootArgs: defaultTag(t, firecrackerType, "DefaultBootArgs"),
 			Log: FirecrackerLog{
 				Level:         defaultTag(t, firecrackerLogType, "Level"),
-				LogPath:       defaultTag(t, firecrackerLogType, "LogPath"),
 				ShowLevel:     defaultBoolTag(t, firecrackerLogType, "ShowLevel"),
 				ShowLogOrigin: defaultBoolTag(t, firecrackerLogType, "ShowLogOrigin"),
 			},
@@ -173,7 +170,6 @@ show_level = false
 	assert.Equal(t, defaultTag(t, firecrackerType, "KernelImagePath"), cfg.Runtime.Firecracker.KernelImagePath)
 	assert.Equal(t, defaultTag(t, firecrackerType, "DefaultBootArgs"), cfg.Runtime.Firecracker.DefaultBootArgs)
 	assert.Equal(t, defaultTag(t, firecrackerLogType, "Level"), cfg.Runtime.Firecracker.Log.Level)
-	assert.Equal(t, defaultTag(t, firecrackerLogType, "LogPath"), cfg.Runtime.Firecracker.Log.LogPath)
 	require.NotNil(t, cfg.Runtime.Firecracker.Log.ShowLevel)
 	assert.False(t, *cfg.Runtime.Firecracker.Log.ShowLevel)
 	assert.Equal(t, defaultBoolTag(t, firecrackerLogType, "ShowLogOrigin"), cfg.Runtime.Firecracker.Log.ShowLogOrigin)

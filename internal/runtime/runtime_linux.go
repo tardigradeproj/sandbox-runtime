@@ -123,11 +123,12 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	}
 
 	socketPath := filepath.Join(sandboxDir, "firecracker.sock")
+	logPath := filepath.Join(sandboxDir, "firecracker.log")
 
 	machineCfg := firecracker.Config{
 		VMID:            sandboxID,
 		SocketPath:      socketPath,
-		LogPath:         fc.Log.LogPath,
+		LogPath:         logPath,
 		LogLevel:        fc.Log.Level,
 		KernelImagePath: kernelImagePath,
 		KernelArgs:      bootArgs,
@@ -171,6 +172,7 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		obs.RootfsPath:  rootfsPath,
 		obs.ScratchPath: scratchPath,
 		obs.SocketPath:  socketPath,
+		obs.LogPath:     logPath,
 	}).Info("sandbox created")
 	return &v1.CreateSandboxResponse{SandboxId: sandboxID}, nil
 }
