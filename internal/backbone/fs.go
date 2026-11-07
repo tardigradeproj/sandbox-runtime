@@ -128,13 +128,13 @@ func (r *RootFS) PullRootFS(ctx context.Context, req *v1.PullRootFSRequest) (*v1
 	digestStr := digest.String()
 	log = log.WithField(obs.RootfsDigest, digestStr)
 
-	repoTag, repoDigest := repoRefs(image, digestStr)
+	repoTags, repoDigest := repoRefs(image, digestStr)
 
 	if _, ok, err := r.store.Lookup(digestStr); err != nil {
 		log.WithError(err).Error("failed to look up store entry")
 		return nil, status.Errorf(codes.Internal, "%v", err)
 	} else if ok {
-		if err := r.store.AddRef(digestStr, repoTag, repoDigest); err != nil {
+		if err := r.store.AddRef(digestStr, repoTags, repoDigest); err != nil {
 			log.WithError(err).Error("failed to add ref to existing entry")
 			return nil, status.Errorf(codes.Internal, "%v", err)
 		}
@@ -171,9 +171,7 @@ func (r *RootFS) PullRootFS(ctx context.Context, req *v1.PullRootFSRequest) (*v1
 		Size:            uint64(fi.Size()),
 		SpecImage:       image,
 		SpecAnnotations: spec.GetAnnotations(),
-	}
-	if repoTag != "" {
-		entry.RepoTags = []string{repoTag}
+		RepoTags:        repoTags,
 	}
 	if repoDigest != "" {
 		entry.RepoDigests = []string{repoDigest}
@@ -224,15 +222,24 @@ func entryToProto(e store.Entry) *v1.RootFS {
 // repoRefs derives the repo-qualified tag and digest references for
 // image, given the digest it resolved to. image is re-parsed locally
 // (no network call) since oci.PullImage already validated it.
-func repoRefs(image, digestStr string) (repoTag, repoDigest string) {
+//
+// repoTags includes both the canonicalized tag (e.g. "alpine" becomes
+// "index.docker.io/library/alpine:latest") and the original, as-typed
+// image string, so a later lookup using whatever shorthand the caller
+// used to pull still resolves.
+func repoRefs(image, digestStr string) (repoTags []string, repoDigest string) {
 	ref, err := name.ParseReference(image)
 	if err != nil {
-		return "", ""
+		return nil, ""
 	}
 	if t, ok := ref.(name.Tag); ok {
-		repoTag = t.Name()
+		canonical := t.Name()
+		repoTags = append(repoTags, canonical)
+		if image != canonical {
+			repoTags = append(repoTags, image)
+		}
 	}
-	return repoTag, ref.Context().Digest(digestStr).Name()
+	return repoTags, ref.Context().Digest(digestStr).Name()
 }
 
 // pullError maps a registry-side pull failure to an appropriate gRPC

@@ -294,3 +294,24 @@ func TestRemoveRootFSUnknownIsNoop(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
+
+// TestRepoRefsIncludesOriginalShorthand reproduces the bug: pulling
+// "alpine" used to only register its canonicalized tag
+// ("index.docker.io/library/alpine:latest"), so a later CreateSandbox
+// call using the exact string the caller pulled with ("alpine") would
+// 404 even though PullRootFS itself accepted it.
+func TestRepoRefsIncludesOriginalShorthand(t *testing.T) {
+	const digest = "sha256:" + "a1b2c3d4e5f60718293a4b5c6d7e8f9031425364758697a8b9cadbecfd0e1f2"
+
+	repoTags, repoDigest := repoRefs("alpine", digest)
+	assert.Contains(t, repoTags, "alpine")
+	assert.Contains(t, repoTags, "index.docker.io/library/alpine:latest")
+	assert.Equal(t, "index.docker.io/library/alpine@"+digest, repoDigest)
+}
+
+func TestRepoRefsSkipsDuplicateWhenAlreadyCanonical(t *testing.T) {
+	const digest = "sha256:" + "a1b2c3d4e5f60718293a4b5c6d7e8f9031425364758697a8b9cadbecfd0e1f2"
+
+	repoTags, _ := repoRefs("index.docker.io/library/alpine:latest", digest)
+	assert.Equal(t, []string{"index.docker.io/library/alpine:latest"}, repoTags)
+}

@@ -183,10 +183,10 @@ func (s *Store) Commit(entry Entry, tmpImagePath string) error {
 	return s.writeSidecarAtomic(sidecar, entry)
 }
 
-// AddRef records that repoTag and/or repoDigest resolve to digest,
+// AddRef records that repoTags and/or repoDigest resolve to digest,
 // merging into an existing entry without touching its image. digest
 // must already have an entry.
-func (s *Store) AddRef(digest, repoTag, repoDigest string) error {
+func (s *Store) AddRef(digest string, repoTags []string, repoDigest string) error {
 	base, err := digestFileBase(digest)
 	if err != nil {
 		return err
@@ -203,8 +203,8 @@ func (s *Store) AddRef(digest, repoTag, repoDigest string) error {
 	if !ok {
 		return fmt.Errorf("store: no entry for digest %q", digest)
 	}
-	if repoTag != "" {
-		entry.RepoTags = mergeUnique(entry.RepoTags, []string{repoTag})
+	if len(repoTags) > 0 {
+		entry.RepoTags = mergeUnique(entry.RepoTags, repoTags)
 	}
 	if repoDigest != "" {
 		entry.RepoDigests = mergeUnique(entry.RepoDigests, []string{repoDigest})
