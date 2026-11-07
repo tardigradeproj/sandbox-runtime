@@ -33,12 +33,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RuntimeService_Version_FullMethodName       = "/runtime.v1.RuntimeService/Version"
-	RuntimeService_RunSandbox_FullMethodName    = "/runtime.v1.RuntimeService/RunSandbox"
-	RuntimeService_StopSandbox_FullMethodName   = "/runtime.v1.RuntimeService/StopSandbox"
-	RuntimeService_RemoveSandbox_FullMethodName = "/runtime.v1.RuntimeService/RemoveSandbox"
-	RuntimeService_ListSandbox_FullMethodName   = "/runtime.v1.RuntimeService/ListSandbox"
-	RuntimeService_SandboxStatus_FullMethodName = "/runtime.v1.RuntimeService/SandboxStatus"
+	RuntimeService_CreateSandbox_FullMethodName = "/runtime.v1.RuntimeService/CreateSandbox"
+	RuntimeService_StartSandbox_FullMethodName  = "/runtime.v1.RuntimeService/StartSandbox"
 )
 
 // RuntimeServiceClient is the client API for RuntimeService service.
@@ -48,22 +44,8 @@ const (
 // RuntimeService defines the public APIs for managing sandbox lifecycle. It
 // is the SRI analog of CRI's RuntimeService, pared down to the basics.
 type RuntimeServiceClient interface {
-	// Version returns the runtime name, runtime version, and runtime API
-	// version.
-	Version(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error)
-	// RunSandbox creates and starts a sandbox.
-	RunSandbox(ctx context.Context, in *RunSandboxRequest, opts ...grpc.CallOption) (*RunSandboxResponse, error)
-	// StopSandbox stops a running sandbox. It is a no-op if the sandbox is
-	// already stopped.
-	StopSandbox(ctx context.Context, in *StopSandboxRequest, opts ...grpc.CallOption) (*StopSandboxResponse, error)
-	// RemoveSandbox removes a sandbox, stopping it first if it is still
-	// running.
-	RemoveSandbox(ctx context.Context, in *RemoveSandboxRequest, opts ...grpc.CallOption) (*RemoveSandboxResponse, error)
-	// ListSandbox lists sandboxes known to the runtime, optionally narrowed by
-	// filter.
-	ListSandbox(ctx context.Context, in *ListSandboxRequest, opts ...grpc.CallOption) (*ListSandboxResponse, error)
-	// SandboxStatus returns the status of the sandbox identified by id.
-	SandboxStatus(ctx context.Context, in *SandboxStatusRequest, opts ...grpc.CallOption) (*SandboxStatusResponse, error)
+	CreateSandbox(ctx context.Context, in *CreateSandboxRequest, opts ...grpc.CallOption) (*CreateSandboxResponse, error)
+	StartSandbox(ctx context.Context, in *StartSandboxRequest, opts ...grpc.CallOption) (*StartSandboxResponse, error)
 }
 
 type runtimeServiceClient struct {
@@ -74,60 +56,20 @@ func NewRuntimeServiceClient(cc grpc.ClientConnInterface) RuntimeServiceClient {
 	return &runtimeServiceClient{cc}
 }
 
-func (c *runtimeServiceClient) Version(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error) {
+func (c *runtimeServiceClient) CreateSandbox(ctx context.Context, in *CreateSandboxRequest, opts ...grpc.CallOption) (*CreateSandboxResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(VersionResponse)
-	err := c.cc.Invoke(ctx, RuntimeService_Version_FullMethodName, in, out, cOpts...)
+	out := new(CreateSandboxResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_CreateSandbox_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *runtimeServiceClient) RunSandbox(ctx context.Context, in *RunSandboxRequest, opts ...grpc.CallOption) (*RunSandboxResponse, error) {
+func (c *runtimeServiceClient) StartSandbox(ctx context.Context, in *StartSandboxRequest, opts ...grpc.CallOption) (*StartSandboxResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RunSandboxResponse)
-	err := c.cc.Invoke(ctx, RuntimeService_RunSandbox_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *runtimeServiceClient) StopSandbox(ctx context.Context, in *StopSandboxRequest, opts ...grpc.CallOption) (*StopSandboxResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(StopSandboxResponse)
-	err := c.cc.Invoke(ctx, RuntimeService_StopSandbox_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *runtimeServiceClient) RemoveSandbox(ctx context.Context, in *RemoveSandboxRequest, opts ...grpc.CallOption) (*RemoveSandboxResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RemoveSandboxResponse)
-	err := c.cc.Invoke(ctx, RuntimeService_RemoveSandbox_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *runtimeServiceClient) ListSandbox(ctx context.Context, in *ListSandboxRequest, opts ...grpc.CallOption) (*ListSandboxResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListSandboxResponse)
-	err := c.cc.Invoke(ctx, RuntimeService_ListSandbox_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *runtimeServiceClient) SandboxStatus(ctx context.Context, in *SandboxStatusRequest, opts ...grpc.CallOption) (*SandboxStatusResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SandboxStatusResponse)
-	err := c.cc.Invoke(ctx, RuntimeService_SandboxStatus_FullMethodName, in, out, cOpts...)
+	out := new(StartSandboxResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_StartSandbox_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -141,22 +83,8 @@ func (c *runtimeServiceClient) SandboxStatus(ctx context.Context, in *SandboxSta
 // RuntimeService defines the public APIs for managing sandbox lifecycle. It
 // is the SRI analog of CRI's RuntimeService, pared down to the basics.
 type RuntimeServiceServer interface {
-	// Version returns the runtime name, runtime version, and runtime API
-	// version.
-	Version(context.Context, *VersionRequest) (*VersionResponse, error)
-	// RunSandbox creates and starts a sandbox.
-	RunSandbox(context.Context, *RunSandboxRequest) (*RunSandboxResponse, error)
-	// StopSandbox stops a running sandbox. It is a no-op if the sandbox is
-	// already stopped.
-	StopSandbox(context.Context, *StopSandboxRequest) (*StopSandboxResponse, error)
-	// RemoveSandbox removes a sandbox, stopping it first if it is still
-	// running.
-	RemoveSandbox(context.Context, *RemoveSandboxRequest) (*RemoveSandboxResponse, error)
-	// ListSandbox lists sandboxes known to the runtime, optionally narrowed by
-	// filter.
-	ListSandbox(context.Context, *ListSandboxRequest) (*ListSandboxResponse, error)
-	// SandboxStatus returns the status of the sandbox identified by id.
-	SandboxStatus(context.Context, *SandboxStatusRequest) (*SandboxStatusResponse, error)
+	CreateSandbox(context.Context, *CreateSandboxRequest) (*CreateSandboxResponse, error)
+	StartSandbox(context.Context, *StartSandboxRequest) (*StartSandboxResponse, error)
 	mustEmbedUnimplementedRuntimeServiceServer()
 }
 
@@ -167,23 +95,11 @@ type RuntimeServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedRuntimeServiceServer struct{}
 
-func (UnimplementedRuntimeServiceServer) Version(context.Context, *VersionRequest) (*VersionResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Version not implemented")
+func (UnimplementedRuntimeServiceServer) CreateSandbox(context.Context, *CreateSandboxRequest) (*CreateSandboxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSandbox not implemented")
 }
-func (UnimplementedRuntimeServiceServer) RunSandbox(context.Context, *RunSandboxRequest) (*RunSandboxResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RunSandbox not implemented")
-}
-func (UnimplementedRuntimeServiceServer) StopSandbox(context.Context, *StopSandboxRequest) (*StopSandboxResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method StopSandbox not implemented")
-}
-func (UnimplementedRuntimeServiceServer) RemoveSandbox(context.Context, *RemoveSandboxRequest) (*RemoveSandboxResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RemoveSandbox not implemented")
-}
-func (UnimplementedRuntimeServiceServer) ListSandbox(context.Context, *ListSandboxRequest) (*ListSandboxResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListSandbox not implemented")
-}
-func (UnimplementedRuntimeServiceServer) SandboxStatus(context.Context, *SandboxStatusRequest) (*SandboxStatusResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SandboxStatus not implemented")
+func (UnimplementedRuntimeServiceServer) StartSandbox(context.Context, *StartSandboxRequest) (*StartSandboxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartSandbox not implemented")
 }
 func (UnimplementedRuntimeServiceServer) mustEmbedUnimplementedRuntimeServiceServer() {}
 func (UnimplementedRuntimeServiceServer) testEmbeddedByValue()                        {}
@@ -206,110 +122,38 @@ func RegisterRuntimeServiceServer(s grpc.ServiceRegistrar, srv RuntimeServiceSer
 	s.RegisterService(&RuntimeService_ServiceDesc, srv)
 }
 
-func _RuntimeService_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(VersionRequest)
+func _RuntimeService_CreateSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSandboxRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeServiceServer).Version(ctx, in)
+		return srv.(RuntimeServiceServer).CreateSandbox(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeService_Version_FullMethodName,
+		FullMethod: RuntimeService_CreateSandbox_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeServiceServer).Version(ctx, req.(*VersionRequest))
+		return srv.(RuntimeServiceServer).CreateSandbox(ctx, req.(*CreateSandboxRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuntimeService_RunSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RunSandboxRequest)
+func _RuntimeService_StartSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartSandboxRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeServiceServer).RunSandbox(ctx, in)
+		return srv.(RuntimeServiceServer).StartSandbox(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeService_RunSandbox_FullMethodName,
+		FullMethod: RuntimeService_StartSandbox_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeServiceServer).RunSandbox(ctx, req.(*RunSandboxRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _RuntimeService_StopSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StopSandboxRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RuntimeServiceServer).StopSandbox(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: RuntimeService_StopSandbox_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeServiceServer).StopSandbox(ctx, req.(*StopSandboxRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _RuntimeService_RemoveSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RemoveSandboxRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RuntimeServiceServer).RemoveSandbox(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: RuntimeService_RemoveSandbox_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeServiceServer).RemoveSandbox(ctx, req.(*RemoveSandboxRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _RuntimeService_ListSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListSandboxRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RuntimeServiceServer).ListSandbox(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: RuntimeService_ListSandbox_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeServiceServer).ListSandbox(ctx, req.(*ListSandboxRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _RuntimeService_SandboxStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SandboxStatusRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RuntimeServiceServer).SandboxStatus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: RuntimeService_SandboxStatus_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeServiceServer).SandboxStatus(ctx, req.(*SandboxStatusRequest))
+		return srv.(RuntimeServiceServer).StartSandbox(ctx, req.(*StartSandboxRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -322,28 +166,12 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*RuntimeServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Version",
-			Handler:    _RuntimeService_Version_Handler,
+			MethodName: "CreateSandbox",
+			Handler:    _RuntimeService_CreateSandbox_Handler,
 		},
 		{
-			MethodName: "RunSandbox",
-			Handler:    _RuntimeService_RunSandbox_Handler,
-		},
-		{
-			MethodName: "StopSandbox",
-			Handler:    _RuntimeService_StopSandbox_Handler,
-		},
-		{
-			MethodName: "RemoveSandbox",
-			Handler:    _RuntimeService_RemoveSandbox_Handler,
-		},
-		{
-			MethodName: "ListSandbox",
-			Handler:    _RuntimeService_ListSandbox_Handler,
-		},
-		{
-			MethodName: "SandboxStatus",
-			Handler:    _RuntimeService_SandboxStatus_Handler,
+			MethodName: "StartSandbox",
+			Handler:    _RuntimeService_StartSandbox_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
