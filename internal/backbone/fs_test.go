@@ -41,23 +41,24 @@ import (
 	"google.golang.org/grpc/status"
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/ext4"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/erofs"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 )
 
-// fakePacker stands in for mkfs.ext4: on success it writes a placeholder
-// file at imagePath so the real packed image's later os.Stat succeeds.
+// fakePacker stands in for mkfs.erofs: on success it writes a
+// placeholder file at imagePath so the real packed image's later
+// os.Stat succeeds.
 type fakePacker struct {
 	err   error
 	calls int
 }
 
-func (f *fakePacker) Pack(_ context.Context, _, imagePath string, _, _ int64) error {
+func (f *fakePacker) Pack(_ context.Context, _, imagePath string) error {
 	f.calls++
 	if f.err != nil {
 		return f.err
 	}
-	return os.WriteFile(imagePath, []byte("fake ext4 image"), 0o644)
+	return os.WriteFile(imagePath, []byte("fake erofs image"), 0o644)
 }
 
 // uncompressedLayer is a minimal partial.UncompressedLayer backed by
@@ -116,7 +117,7 @@ func newTestRegistry(t *testing.T, repoTag string) string {
 	return host
 }
 
-func newTestRootFS(t *testing.T, pk ext4.Packer) *RootFS {
+func newTestRootFS(t *testing.T, pk erofs.Packer) *RootFS {
 	t.Helper()
 	st, err := store.Open(t.TempDir())
 	require.NoError(t, err)

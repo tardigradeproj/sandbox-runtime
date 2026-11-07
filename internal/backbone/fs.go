@@ -22,12 +22,13 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
+	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/ext4"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/erofs"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/oci"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/rootfs"
 )
@@ -35,19 +36,14 @@ import (
 // RootFS implements v1.RootFSServiceServer.
 type RootFS struct {
 	v1.UnimplementedRootFSServiceServer
-
+	cfg    *cfg.Settings
 	store  *store.Store
-	packer ext4.Packer
+	packer erofs.Packer
 }
 
-// NewRootFS opens (creating if necessary) a rootfs cache rooted at
-// rootDir.
-func NewRootFS(rootDir string) (*RootFS, error) {
-	st, err := store.Open(rootDir)
-	if err != nil {
-		return nil, err
-	}
-	return &RootFS{store: st, packer: ext4.MkfsExt4Packer{}}, nil
+// NewRootFS constructs a RootFS backed by store.
+func NewRootFS(cfg *cfg.Settings, store *store.Store) *RootFS {
+	return &RootFS{cfg: cfg, store: store, packer: erofs.MkfsErofsPacker{}}
 }
 
 // ListRootFS lists the rootfs images known to the runtime, optionally
@@ -146,14 +142,7 @@ func (r *RootFS) PullRootFS(ctx context.Context, req *v1.PullRootFSRequest) (*v1
 		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
 	}
 
-	totalBytes, entryCount, err := ext4.MeasureTree(extractDir)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
-	}
-	sizeBytes := ext4.EstimateImageSize(totalBytes, ext4.DefaultSizeOptions)
-	inodeCount := ext4.EstimateInodeCount(entryCount, ext4.DefaultSizeOptions)
-
-	if err := r.packer.Pack(ctx, extractDir, tmpImage, sizeBytes, inodeCount); err != nil {
+	if err := r.packer.Pack(ctx, extractDir, tmpImage); err != nil {
 		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
 	}
 

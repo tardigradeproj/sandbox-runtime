@@ -18,7 +18,7 @@ proto-tools:
 test:
 	go test ./...
 
-# test-integration exercises the real mkfs.ext4/e2fsprogs toolchain,
+# test-integration exercises the real mkfs.erofs/erofs-utils toolchain,
 # which is Linux-only, inside a disposable container (see .local/) so it
 # also runs on non-Linux development machines. The container stays up
 # after the test run (see .local/docker-compose.yaml); tear it down with

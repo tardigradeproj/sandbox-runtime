@@ -45,7 +45,7 @@ func TestStageCommitLookup(t *testing.T) {
 	defer cleanup()
 	_, err = os.Stat(extractDir)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(tmpImage, []byte("fake ext4 image"), 0o644))
+	require.NoError(t, os.WriteFile(tmpImage, []byte("fake erofs image"), 0o644))
 
 	entry := Entry{Digest: testDigest, RepoTags: []string{"example.com/widget:v1"}, Size: 15}
 	require.NoError(t, s.Commit(entry, tmpImage))
@@ -62,7 +62,7 @@ func TestStageCommitLookup(t *testing.T) {
 	require.NoError(t, err)
 	data, err := os.ReadFile(imgPath)
 	require.NoError(t, err)
-	assert.Equal(t, "fake ext4 image", string(data))
+	assert.Equal(t, "fake erofs image", string(data))
 }
 
 func TestCommitMergesRepoTagsForExistingDigest(t *testing.T) {
