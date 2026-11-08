@@ -240,7 +240,7 @@ func newValidateRunSandboxCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
-	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-4", "sandbox uid")
+	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-5", "sandbox uid")
 	cmd.Flags().Float64Var(&cpu, "cpu", 1, "vCPU count")
 	cmd.Flags().Int64Var(&memoryMib, "memory-mib", 128, "memory size, in MiB")
 	cmd.Flags().Int64Var(&storageMib, "storage-mib", 256, "overlay size, in MiB")

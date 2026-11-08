@@ -30,3 +30,16 @@ test-integration:
 .PHONY: test-integration-down
 test-integration-down:
 	docker compose -f .local/docker-compose.yaml down
+
+IMAGES_DIR := images
+
+.PHONY: images
+images: images-busybox images-ubuntu
+
+.PHONY: images-busybox
+images-busybox:
+	docker build -f $(IMAGES_DIR)/Dockerfile.busybox -t sandbox-rootfs-busybox $(IMAGES_DIR)
+
+.PHONY: images-ubuntu
+images-ubuntu:
+	docker build -f $(IMAGES_DIR)/Dockerfile.ubuntu -t sandbox-rootfs-ubuntu $(IMAGES_DIR)
