@@ -45,7 +45,7 @@ func TestStageCommitLookup(t *testing.T) {
 	defer cleanup()
 	_, err = os.Stat(extractDir)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(tmpImage, []byte("fake ext4 image"), 0o644))
+	require.NoError(t, os.WriteFile(tmpImage, []byte("fake erofs image"), 0o644))
 
 	entry := Entry{Digest: testDigest, RepoTags: []string{"example.com/widget:v1"}, Size: 15}
 	require.NoError(t, s.Commit(entry, tmpImage))
@@ -62,7 +62,7 @@ func TestStageCommitLookup(t *testing.T) {
 	require.NoError(t, err)
 	data, err := os.ReadFile(imgPath)
 	require.NoError(t, err)
-	assert.Equal(t, "fake ext4 image", string(data))
+	assert.Equal(t, "fake erofs image", string(data))
 }
 
 func TestCommitMergesRepoTagsForExistingDigest(t *testing.T) {
@@ -81,7 +81,7 @@ func TestCommitMergesRepoTagsForExistingDigest(t *testing.T) {
 func TestAddRefRequiresExistingEntry(t *testing.T) {
 	s, err := Open(t.TempDir())
 	require.NoError(t, err)
-	assert.Error(t, s.AddRef(testDigest, "example.com/widget:v1", ""))
+	assert.Error(t, s.AddRef(testDigest, []string{"example.com/widget:v1"}, ""))
 }
 
 func TestAddRefMergesIntoExistingEntry(t *testing.T) {
@@ -89,7 +89,7 @@ func TestAddRefMergesIntoExistingEntry(t *testing.T) {
 	require.NoError(t, err)
 	commitFake(t, s, Entry{Digest: testDigest})
 
-	require.NoError(t, s.AddRef(testDigest, "example.com/widget:v2", "example.com/widget@"+testDigest))
+	require.NoError(t, s.AddRef(testDigest, []string{"example.com/widget:v2"}, "example.com/widget@"+testDigest))
 
 	got, ok, err := s.LookupByRef("example.com/widget:v2")
 	require.NoError(t, err)
@@ -99,6 +99,21 @@ func TestAddRefMergesIntoExistingEntry(t *testing.T) {
 	_, ok, err = s.LookupByRef("example.com/widget@" + testDigest)
 	require.NoError(t, err)
 	assert.True(t, ok)
+}
+
+func TestAddRefAcceptsMultipleTags(t *testing.T) {
+	s, err := Open(t.TempDir())
+	require.NoError(t, err)
+	commitFake(t, s, Entry{Digest: testDigest})
+
+	require.NoError(t, s.AddRef(testDigest, []string{"example.com/widget:v2", "widget"}, ""))
+
+	for _, ref := range []string{"example.com/widget:v2", "widget"} {
+		got, ok, err := s.LookupByRef(ref)
+		require.NoError(t, err)
+		require.True(t, ok, "expected %q to resolve", ref)
+		assert.Equal(t, testDigest, got.Digest)
+	}
 }
 
 func TestResolveByBareDigestOrRef(t *testing.T) {

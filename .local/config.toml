@@ -1,0 +1,25 @@
+state   = "/run/sandbox-runtime"
+version = "0.1.0"
+
+[rootfs]
+dir = "/var/lib/sandbox-runtime/rootfs"
+
+[rootfs.packer]
+type = "ext4"
+
+[grpc]
+listen_address = "unix:///var/run/sandbox-runtime.sock"
+
+[logs]
+level  = "info"
+format = "text"
+
+[runtime.firecracker]
+bin                = "/usr/local/bin/firecracker"
+kernel_image_path  = "/var/lib/sandbox-runtime/vmlinux"
+default_boot_args  = "console=ttyS0 reboot=k panic=1 pci=off init=/init"
+
+[runtime.firecracker.log]
+level           = "Info"
+show_level      = true
+show_log_origin = false

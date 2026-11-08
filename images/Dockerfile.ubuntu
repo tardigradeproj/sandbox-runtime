@@ -1,0 +1,7 @@
+FROM registry.k8s.io/agent-sandbox/sandboxd:v1.0.10 AS sandboxd
+
+FROM ubuntu:24.04
+
+COPY --from=sandboxd /usr/local/bin/sandboxd /usr/local/bin/sandboxd
+COPY --chmod=755 init /init
+

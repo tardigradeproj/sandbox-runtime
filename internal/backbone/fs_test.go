@@ -41,23 +41,24 @@ import (
 	"google.golang.org/grpc/status"
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/ext4"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/store"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/packer"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 )
 
-// fakePacker stands in for mkfs.ext4: on success it writes a placeholder
-// file at imagePath so the real packed image's later os.Stat succeeds.
+// fakePacker stands in for mkfs.erofs: on success it writes a
+// placeholder file at imagePath so the real packed image's later
+// os.Stat succeeds.
 type fakePacker struct {
 	err   error
 	calls int
 }
 
-func (f *fakePacker) Pack(_ context.Context, _, imagePath string, _, _ int64) error {
+func (f *fakePacker) Pack(_ context.Context, _, imagePath string) error {
 	f.calls++
 	if f.err != nil {
 		return f.err
 	}
-	return os.WriteFile(imagePath, []byte("fake ext4 image"), 0o644)
+	return os.WriteFile(imagePath, []byte("fake erofs image"), 0o644)
 }
 
 // uncompressedLayer is a minimal partial.UncompressedLayer backed by
@@ -116,7 +117,7 @@ func newTestRegistry(t *testing.T, repoTag string) string {
 	return host
 }
 
-func newTestRootFS(t *testing.T, pk ext4.Packer) *RootFS {
+func newTestRootFS(t *testing.T, pk packer.Packer) *RootFS {
 	t.Helper()
 	st, err := store.Open(t.TempDir())
 	require.NoError(t, err)
@@ -292,4 +293,25 @@ func TestRemoveRootFSUnknownIsNoop(t *testing.T) {
 		Spec: &v1.RootFSSpec{Image: "sha256:" + strings.Repeat("a", 64)},
 	})
 	assert.NoError(t, err)
+}
+
+// TestRepoRefsIncludesOriginalShorthand reproduces the bug: pulling
+// "alpine" used to only register its canonicalized tag
+// ("index.docker.io/library/alpine:latest"), so a later CreateSandbox
+// call using the exact string the caller pulled with ("alpine") would
+// 404 even though PullRootFS itself accepted it.
+func TestRepoRefsIncludesOriginalShorthand(t *testing.T) {
+	const digest = "sha256:" + "a1b2c3d4e5f60718293a4b5c6d7e8f9031425364758697a8b9cadbecfd0e1f2"
+
+	repoTags, repoDigest := repoRefs("alpine", digest)
+	assert.Contains(t, repoTags, "alpine")
+	assert.Contains(t, repoTags, "index.docker.io/library/alpine:latest")
+	assert.Equal(t, "index.docker.io/library/alpine@"+digest, repoDigest)
+}
+
+func TestRepoRefsSkipsDuplicateWhenAlreadyCanonical(t *testing.T) {
+	const digest = "sha256:" + "a1b2c3d4e5f60718293a4b5c6d7e8f9031425364758697a8b9cadbecfd0e1f2"
+
+	repoTags, _ := repoRefs("index.docker.io/library/alpine:latest", digest)
+	assert.Equal(t, []string{"index.docker.io/library/alpine:latest"}, repoTags)
 }

@@ -17,7 +17,7 @@
 //
 // Layout under root:
 //
-//	<root>/images/sha256-<hex>.ext4   the packed image
+//	<root>/images/sha256-<hex>.img    the packed image (erofs, ext4, ...)
 //	<root>/images/sha256-<hex>.json   its metadata sidecar
 //	<root>/tmp/<random>/               scratch space for in-progress pulls
 package store
@@ -91,7 +91,7 @@ func (s *Store) ImagePath(digest string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(s.root, "images", base+".ext4"), nil
+	return filepath.Join(s.root, "images", base+".img"), nil
 }
 
 // Lookup returns the entry for digest, if present.
@@ -145,7 +145,7 @@ func (s *Store) Stage() (extractDir, tmpImagePath string, cleanup func(), err er
 		cleanup()
 		return "", "", nil, fmt.Errorf("store: stage: %w", err)
 	}
-	tmpImagePath = filepath.Join(tmpDir, "image.ext4")
+	tmpImagePath = filepath.Join(tmpDir, "image.img")
 	return extractDir, tmpImagePath, cleanup, nil
 }
 
@@ -157,7 +157,7 @@ func (s *Store) Commit(entry Entry, tmpImagePath string) error {
 	if err != nil {
 		return err
 	}
-	imagePath := filepath.Join(s.root, "images", base+".ext4")
+	imagePath := filepath.Join(s.root, "images", base+".img")
 	if err := os.Rename(tmpImagePath, imagePath); err != nil {
 		return fmt.Errorf("store: commit image: %w", err)
 	}
@@ -183,10 +183,10 @@ func (s *Store) Commit(entry Entry, tmpImagePath string) error {
 	return s.writeSidecarAtomic(sidecar, entry)
 }
 
-// AddRef records that repoTag and/or repoDigest resolve to digest,
+// AddRef records that repoTags and/or repoDigest resolve to digest,
 // merging into an existing entry without touching its image. digest
 // must already have an entry.
-func (s *Store) AddRef(digest, repoTag, repoDigest string) error {
+func (s *Store) AddRef(digest string, repoTags []string, repoDigest string) error {
 	base, err := digestFileBase(digest)
 	if err != nil {
 		return err
@@ -203,8 +203,8 @@ func (s *Store) AddRef(digest, repoTag, repoDigest string) error {
 	if !ok {
 		return fmt.Errorf("store: no entry for digest %q", digest)
 	}
-	if repoTag != "" {
-		entry.RepoTags = mergeUnique(entry.RepoTags, []string{repoTag})
+	if len(repoTags) > 0 {
+		entry.RepoTags = mergeUnique(entry.RepoTags, repoTags)
 	}
 	if repoDigest != "" {
 		entry.RepoDigests = mergeUnique(entry.RepoDigests, []string{repoDigest})
@@ -219,7 +219,7 @@ func (s *Store) Remove(digest string) error {
 		return err
 	}
 	dir := filepath.Join(s.root, "images")
-	if err := removeIfExists(filepath.Join(dir, base+".ext4")); err != nil {
+	if err := removeIfExists(filepath.Join(dir, base+".img")); err != nil {
 		return err
 	}
 	return removeIfExists(filepath.Join(dir, base+".json"))

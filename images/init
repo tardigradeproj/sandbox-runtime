@@ -1,0 +1,102 @@
+#!/bin/sh
+# PID 1 for sandbox guests. Assembles a writable overlay out of the
+# two attached drives -- /dev/vda (the packed rootfs image, already
+# attached read-only at the Firecracker level) and /dev/vdb (the
+# per-sandbox overlay image CreateSandbox pre-formats as ext4) -- and
+# pivots into it before handing off to the real init.
+#
+# Each step checks its own exit status and drops to an interactive
+# shell on failure instead of just letting PID 1 die into a kernel
+# panic, so a boot problem is something you can poke at live.
+
+LOWER_RO_DEVICE=/dev/vda
+WRITABLE_RW_DEVICE=/dev/vdb
+
+LOWER_RO=/mnt/ro
+WRITABLE_RW=/mnt/rw
+UPPER=${WRITABLE_RW}/upper
+WORK=${WRITABLE_RW}/work
+
+NEWROOT=${WRITABLE_RW}/newroot
+NEWROOT_LOWER_RO=${NEWROOT}/ro
+NEWROOT_WRITABLE_RW=${NEWROOT}/rw
+
+echo "Setup essential mounts"
+mount -t devtmpfs none /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+# / is still the kernel's own direct, read-only mount of
+# $LOWER_RO_DEVICE at this point (per the "root=... ro" boot arg), so
+# nothing under it is writable yet -- not even to mkdir a mountpoint.
+# A tmpfs over /mnt gives every mkdir below somewhere to land in.
+mount -t tmpfs inittemp /mnt
+
+echo "Setting up overlayroot..."
+
+# 1. Mount read-only rootfs
+echo "Mounting read-only rootfs from $LOWER_RO_DEVICE to $LOWER_RO"
+mkdir -p ${LOWER_RO}
+mount -t ext4 -o ro ${LOWER_RO_DEVICE} ${LOWER_RO}
+if [ $? -ne 0 ]; then
+	echo "Error mounting read-only rootfs!"
+	exec sh  # Drop to shell for debugging
+fi
+echo "Read-only rootfs mounted successfully."
+
+# 2. Mount writable device
+echo "Mounting writable device $WRITABLE_RW_DEVICE to $WRITABLE_RW"
+mkdir -p ${WRITABLE_RW}
+mount -t ext4 ${WRITABLE_RW_DEVICE} ${WRITABLE_RW}
+if [ $? -ne 0 ]; then
+	echo "Error mounting writable device!"
+	exec sh  # Drop to shell for debugging
+fi
+echo "Writable device mounted successfully."
+
+# 3. Create upper and work directories
+echo "Creating upper and work directories in $WRITABLE_RW"
+mkdir -p ${UPPER}
+mkdir -p ${WORK}
+mkdir -p ${NEWROOT}
+# These two stay empty here: $LOWER_RO and $WRITABLE_RW are both
+# nested under the original root's tree, so pivot_root below carries
+# them along for free, reachable afterwards at /oldroot/mnt/ro and
+# /oldroot/mnt/rw with no separate mount needed.
+mkdir -p ${NEWROOT_LOWER_RO}
+mkdir -p ${NEWROOT_WRITABLE_RW}
+
+# 4. Mount overlayfs
+echo "Mounting overlayfs to $NEWROOT"
+mount -t overlay overlay -o lowerdir=${LOWER_RO},upperdir=${UPPER},workdir=${WORK} ${NEWROOT}
+if [ $? -ne 0 ]; then
+	echo "Error mounting overlayfs!"
+	exec sh  # Drop to shell for debugging
+fi
+echo "Overlayfs mounted successfully."
+
+echo "Verifying $NEWROOT is a mount point..."
+echo $(mount)
+
+# 5. Carry /dev, /proc, /sys into the new root -- switch_root would
+# do this automatically, but it also refuses to run unless the
+# *current* root is itself tmpfs/ramfs/rootfs, which ours (ext4)
+# isn't, so this uses pivot_root and moves them over by hand instead.
+echo "Moving /dev, /proc, /sys into $NEWROOT"
+mkdir -p ${NEWROOT}/dev ${NEWROOT}/proc ${NEWROOT}/sys
+mount -o move /dev ${NEWROOT}/dev
+mount -o move /proc ${NEWROOT}/proc
+mount -o move /sys ${NEWROOT}/sys
+
+echo "Pivoting root to ${NEWROOT}"
+cd ${NEWROOT}
+mkdir -p oldroot
+pivot_root . oldroot
+if [ $? -ne 0 ]; then
+	echo "Error pivoting root!"
+	exec sh  # Drop to shell for debugging
+fi
+
+if [ -x /sbin/init ]; then
+	exec chroot . /sbin/init
+fi
+exec chroot . /bin/sh

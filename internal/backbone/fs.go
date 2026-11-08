@@ -17,39 +17,41 @@ package backbone
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/store"
+	"github.com/sirupsen/logrus"
+	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
+	obs "github.com/tardigradeproj/sandbox-runtime/pkg/observability"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/ext4"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/oci"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/rootfs"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/oci"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/packer"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/rootfs"
 )
 
 // RootFS implements v1.RootFSServiceServer.
 type RootFS struct {
 	v1.UnimplementedRootFSServiceServer
-
+	cfg    *cfg.Settings
 	store  *store.Store
-	packer ext4.Packer
+	packer packer.Packer
 }
 
-// NewRootFS opens (creating if necessary) a rootfs cache rooted at
-// rootDir.
-func NewRootFS(rootDir string) (*RootFS, error) {
-	st, err := store.Open(rootDir)
+// NewRootFS constructs a RootFS backed by store, using the packer
+// format selected by cfg.Rootfs.Packer.Type.
+func NewRootFS(cfg *cfg.Settings, store *store.Store) (*RootFS, error) {
+	pk, err := packer.New(packer.Type(cfg.Rootfs.Packer.Type))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("backbone: %w", err)
 	}
-	return &RootFS{store: st, packer: ext4.MkfsExt4Packer{}}, nil
+	return &RootFS{cfg: cfg, store: store, packer: pk}, nil
 }
 
 // ListRootFS lists the rootfs images known to the runtime, optionally
@@ -112,56 +114,62 @@ func (r *RootFS) PullRootFS(ctx context.Context, req *v1.PullRootFSRequest) (*v1
 	if image == "" {
 		return nil, status.Error(codes.InvalidArgument, "spec.image must be set")
 	}
+	log := logrus.WithField(obs.RootfsImage, image)
+	log.Info("pulling rootfs")
 
-	img, err := oci.PullImage(ctx, image, authOption(req.GetAuth()))
+	img, err := oci.PullImage(ctx, image)
 	if err != nil {
 		if errors.Is(err, oci.ErrInvalidReference) {
-			return nil, status.Errorf(codes.InvalidArgument, "pull rootfs: %v", err)
+			return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 		}
+		log.WithError(err).Error("failed to pull image")
 		return nil, pullError(err)
 	}
 
 	digest, err := img.Digest()
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
+		log.WithError(err).Error("failed to resolve digest")
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 	digestStr := digest.String()
+	log = log.WithField(obs.RootfsDigest, digestStr)
 
-	repoTag, repoDigest := repoRefs(image, digestStr)
+	repoTags, repoDigest := repoRefs(image, digestStr)
 
 	if _, ok, err := r.store.Lookup(digestStr); err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
+		log.WithError(err).Error("failed to look up store entry")
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	} else if ok {
-		if err := r.store.AddRef(digestStr, repoTag, repoDigest); err != nil {
-			return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
+		if err := r.store.AddRef(digestStr, repoTags, repoDigest); err != nil {
+			log.WithError(err).Error("failed to add ref to existing entry")
+			return nil, status.Errorf(codes.Internal, "%v", err)
 		}
+		log.Info("rootfs already present, added ref")
 		return &v1.PullRootFSResponse{RootfsRef: digestStr}, nil
 	}
 
 	extractDir, tmpImage, cleanup, err := r.store.Stage()
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
+		log.WithError(err).Error("failed to stage store entry")
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 	defer cleanup()
 
 	if err := rootfs.Unpack(ctx, img, extractDir); err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
+		log.WithError(err).Error("failed to unpack layers")
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
+	log.Debug("layers unpacked")
 
-	totalBytes, entryCount, err := ext4.MeasureTree(extractDir)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
-	}
-	sizeBytes := ext4.EstimateImageSize(totalBytes, ext4.DefaultSizeOptions)
-	inodeCount := ext4.EstimateInodeCount(entryCount, ext4.DefaultSizeOptions)
-
-	if err := r.packer.Pack(ctx, extractDir, tmpImage, sizeBytes, inodeCount); err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
+	if err := r.packer.Pack(ctx, extractDir, tmpImage); err != nil {
+		log.WithError(err).Error("failed to pack rootfs image")
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 
 	fi, err := os.Stat(tmpImage)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
+		log.WithError(err).Error("failed to stat packed image")
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 
 	entry := store.Entry{
@@ -169,17 +177,21 @@ func (r *RootFS) PullRootFS(ctx context.Context, req *v1.PullRootFSRequest) (*v1
 		Size:            uint64(fi.Size()),
 		SpecImage:       image,
 		SpecAnnotations: spec.GetAnnotations(),
-	}
-	if repoTag != "" {
-		entry.RepoTags = []string{repoTag}
+		RepoTags:        repoTags,
 	}
 	if repoDigest != "" {
 		entry.RepoDigests = []string{repoDigest}
 	}
 	if err := r.store.Commit(entry, tmpImage); err != nil {
-		return nil, status.Errorf(codes.Internal, "pull rootfs: %v", err)
+		log.WithError(err).Error("failed to commit store entry")
+		return nil, status.Errorf(codes.Internal, "%v", err)
 	}
 
+	imagePath, _ := r.store.ImagePath(digestStr)
+	log.WithFields(logrus.Fields{
+		obs.RootfsPath: imagePath,
+		obs.RootfsSize: entry.Size,
+	}).Info("rootfs pulled")
 	return &v1.PullRootFSResponse{RootfsRef: digestStr}, nil
 }
 
@@ -216,32 +228,24 @@ func entryToProto(e store.Entry) *v1.RootFS {
 // repoRefs derives the repo-qualified tag and digest references for
 // image, given the digest it resolved to. image is re-parsed locally
 // (no network call) since oci.PullImage already validated it.
-func repoRefs(image, digestStr string) (repoTag, repoDigest string) {
+//
+// repoTags includes both the canonicalized tag (e.g. "alpine" becomes
+// "index.docker.io/library/alpine:latest") and the original, as-typed
+// image string, so a later lookup using whatever shorthand the caller
+// used to pull still resolves.
+func repoRefs(image, digestStr string) (repoTags []string, repoDigest string) {
 	ref, err := name.ParseReference(image)
 	if err != nil {
-		return "", ""
+		return nil, ""
 	}
 	if t, ok := ref.(name.Tag); ok {
-		repoTag = t.Name()
+		canonical := t.Name()
+		repoTags = append(repoTags, canonical)
+		if image != canonical {
+			repoTags = append(repoTags, image)
+		}
 	}
-	return repoTag, ref.Context().Digest(digestStr).Name()
-}
-
-// authOption maps a PullRootFSRequest's AuthConfig onto a crane.Option,
-// falling back to the default keychain when auth carries no
-// credentials (which is also crane's own default).
-func authOption(auth *v1.AuthConfig) crane.Option {
-	if auth == nil || (auth.GetUsername() == "" && auth.GetPassword() == "" && auth.GetAuth() == "" &&
-		auth.GetIdentityToken() == "" && auth.GetRegistryToken() == "") {
-		return crane.WithAuthFromKeychain(authn.DefaultKeychain)
-	}
-	return crane.WithAuth(authn.FromConfig(authn.AuthConfig{
-		Username:      auth.GetUsername(),
-		Password:      auth.GetPassword(),
-		Auth:          auth.GetAuth(),
-		IdentityToken: auth.GetIdentityToken(),
-		RegistryToken: auth.GetRegistryToken(),
-	}))
+	return repoTags, ref.Context().Digest(digestStr).Name()
 }
 
 // pullError maps a registry-side pull failure to an appropriate gRPC
@@ -251,12 +255,12 @@ func pullError(err error) error {
 	if errors.As(err, &terr) {
 		switch terr.StatusCode {
 		case http.StatusUnauthorized:
-			return status.Errorf(codes.Unauthenticated, "pull rootfs: %v", err)
+			return status.Errorf(codes.Unauthenticated, "%v", err)
 		case http.StatusForbidden:
-			return status.Errorf(codes.PermissionDenied, "pull rootfs: %v", err)
+			return status.Errorf(codes.PermissionDenied, "%v", err)
 		case http.StatusNotFound:
-			return status.Errorf(codes.NotFound, "pull rootfs: %v", err)
+			return status.Errorf(codes.NotFound, "%v", err)
 		}
 	}
-	return status.Errorf(codes.Internal, "pull rootfs: %v", err)
+	return status.Errorf(codes.Internal, "%v", err)
 }

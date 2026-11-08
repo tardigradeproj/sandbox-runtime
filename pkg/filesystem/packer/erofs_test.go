@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ext4
+package packer
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 
 func fakeMkfs(t *testing.T, argsFile, failMsg string) string {
 	t.Helper()
-	script := filepath.Join(t.TempDir(), "fake-mkfs.ext4")
+	script := filepath.Join(t.TempDir(), "fake-mkfs.erofs")
 	body := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shQuote(argsFile) + "\n"
 	if failMsg != "" {
 		body += "echo " + shQuote(failMsg) + " >&2\nexit 1\n"
@@ -42,46 +42,46 @@ func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func TestMkfsExt4PackerArgs(t *testing.T) {
+func TestMkfsErofsPackerArgs(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "args.txt")
 	bin := fakeMkfs(t, argsFile, "")
 
-	packer := MkfsExt4Packer{Bin: bin}
+	packer := MkfsErofsPacker{Bin: bin}
 	srcDir := t.TempDir()
-	imagePath := filepath.Join(t.TempDir(), "rootfs.ext4")
+	imagePath := filepath.Join(t.TempDir(), "rootfs.erofs")
 
-	require.NoError(t, packer.Pack(context.Background(), srcDir, imagePath, 10*1024*1024, 2048))
+	require.NoError(t, packer.Pack(context.Background(), srcDir, imagePath))
 
 	got, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
 	args := strings.Fields(string(got))
-	want := []string{"-F", "-d", srcDir, "-N", "2048", imagePath, "10240K"}
+	want := []string{imagePath, srcDir}
 	assert.Equal(t, want, args)
 }
 
-func TestMkfsExt4PackerExtraArgs(t *testing.T) {
+func TestMkfsErofsPackerExtraArgs(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "args.txt")
 	bin := fakeMkfs(t, argsFile, "")
 
-	packer := MkfsExt4Packer{Bin: bin, Options: PackOptions{ExtraMkfsArgs: []string{"-O", "^has_journal"}}}
+	packer := MkfsErofsPacker{Bin: bin, Options: PackOptions{ExtraMkfsArgs: []string{"-zlz4hc,9"}}}
 	srcDir := t.TempDir()
-	imagePath := filepath.Join(t.TempDir(), "rootfs.ext4")
+	imagePath := filepath.Join(t.TempDir(), "rootfs.erofs")
 
-	require.NoError(t, packer.Pack(context.Background(), srcDir, imagePath, 4096, 10))
+	require.NoError(t, packer.Pack(context.Background(), srcDir, imagePath))
 
 	got, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
 	args := strings.Fields(string(got))
-	want := []string{"-F", "-d", srcDir, "-N", "10", "-O", "^has_journal", imagePath, "4K"}
+	want := []string{"-zlz4hc,9", imagePath, srcDir}
 	assert.Equal(t, want, args)
 }
 
-func TestMkfsExt4PackerFailureIncludesStderr(t *testing.T) {
+func TestMkfsErofsPackerFailureIncludesStderr(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "args.txt")
-	bin := fakeMkfs(t, argsFile, "mkfs.ext4: no space left on device")
+	bin := fakeMkfs(t, argsFile, "mkfs.erofs: no space left on device")
 
-	packer := MkfsExt4Packer{Bin: bin}
-	err := packer.Pack(context.Background(), t.TempDir(), filepath.Join(t.TempDir(), "rootfs.ext4"), 4096, 10)
+	packer := MkfsErofsPacker{Bin: bin}
+	err := packer.Pack(context.Background(), t.TempDir(), filepath.Join(t.TempDir(), "rootfs.erofs"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no space left on device")
 }

@@ -18,7 +18,7 @@ proto-tools:
 test:
 	go test ./...
 
-# test-integration exercises the real mkfs.ext4/e2fsprogs toolchain,
+# test-integration exercises the real mkfs.erofs/erofs-utils toolchain,
 # which is Linux-only, inside a disposable container (see .local/) so it
 # also runs on non-Linux development machines. The container stays up
 # after the test run (see .local/docker-compose.yaml); tear it down with
@@ -30,3 +30,16 @@ test-integration:
 .PHONY: test-integration-down
 test-integration-down:
 	docker compose -f .local/docker-compose.yaml down
+
+IMAGES_DIR := images
+
+.PHONY: images
+images: images-busybox images-ubuntu
+
+.PHONY: images-busybox
+images-busybox:
+	docker build -f $(IMAGES_DIR)/Dockerfile.busybox -t sandbox-rootfs-busybox $(IMAGES_DIR)
+
+.PHONY: images-ubuntu
+images-ubuntu:
+	docker build -f $(IMAGES_DIR)/Dockerfile.ubuntu -t sandbox-rootfs-ubuntu $(IMAGES_DIR)
