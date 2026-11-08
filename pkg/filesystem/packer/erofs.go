@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package erofs
+package packer
 
 import (
 	"bytes"
@@ -20,11 +20,6 @@ import (
 	"fmt"
 	"os/exec"
 )
-
-// Packer builds an EROFS filesystem image from a populated directory.
-type Packer interface {
-	Pack(ctx context.Context, srcDir, imagePath string) error
-}
 
 // PackOptions carries escape-hatch tuning for MkfsErofsPacker.
 type PackOptions struct {

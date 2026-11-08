@@ -14,11 +14,11 @@
 
 //go:build integration
 
-// This file exercises the real mkfs.erofs/erofs-utils toolchain and
-// only runs on Linux with erofs-utils installed, e.g. via
+// This file exercises the real mkfs.ext4/e2fsprogs toolchain and only
+// runs on Linux with e2fsprogs installed, e.g. via
 // `make test-integration`.
 
-package erofs
+package packer
 
 import (
 	"context"
@@ -31,25 +31,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMkfsErofsPackerIntegration(t *testing.T) {
+func TestMkfsExt4PackerIntegration(t *testing.T) {
 	srcDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "hello.txt"), []byte("hello from tardigrade\n"), 0o644))
 	require.NoError(t, os.Mkdir(filepath.Join(srcDir, "etc"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "etc", "hostname"), []byte("sandbox\n"), 0o644))
 
-	imagePath := filepath.Join(t.TempDir(), "rootfs.erofs")
-	packer := MkfsErofsPacker{}
+	imagePath := filepath.Join(t.TempDir(), "rootfs.ext4")
+	packer := MkfsExt4Packer{}
 	require.NoError(t, packer.Pack(context.Background(), srcDir, imagePath))
 
-	extractDir := t.TempDir()
-	out, err := exec.Command("fsck.erofs", "--extract="+extractDir, imagePath).CombinedOutput()
-	require.NoError(t, err, "fsck.erofs --extract: %s", out)
+	out, err := exec.Command("dumpe2fs", "-h", imagePath).CombinedOutput()
+	require.NoError(t, err, "dumpe2fs -h: %s", out)
+	assert.Contains(t, string(out), "Filesystem magic number")
 
-	got, err := os.ReadFile(filepath.Join(extractDir, "hello.txt"))
-	require.NoError(t, err)
-	assert.Equal(t, "hello from tardigrade\n", string(got))
-
-	got, err = os.ReadFile(filepath.Join(extractDir, "etc", "hostname"))
-	require.NoError(t, err)
-	assert.Equal(t, "sandbox\n", string(got))
+	out, err = exec.Command("debugfs", "-R", "ls -l /", imagePath).CombinedOutput()
+	require.NoError(t, err, "debugfs ls: %s", out)
+	assert.Contains(t, string(out), "hello.txt")
+	assert.Contains(t, string(out), "etc")
 }

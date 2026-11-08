@@ -34,7 +34,7 @@ func newRootCmd() *cobra.Command {
 
 			logrus.Infof("loaded config from %s", configPath)
 			logrus.WithFields(logrus.Fields{
-				observability.ConfigRootfs:      cfg.Rootfs,
+				observability.ConfigRootfs:      cfg.Rootfs.Dir,
 				observability.ConfigVersion:     cfg.Version,
 				observability.GRPCListenAddress: cfg.GRPC.ListenAddress,
 				observability.FirecrackerBin:    cfg.Runtime.Firecracker.Bin,
@@ -48,6 +48,8 @@ func newRootCmd() *cobra.Command {
 	// TEMPORARY: manual-testing subcommands, remove before merging.
 	cmd.AddCommand(newValidatePullCmd())
 	cmd.AddCommand(newValidateCreateSandboxCmd())
+	cmd.AddCommand(newValidateStartSandboxCmd())
+	cmd.AddCommand(newValidateRunSandboxCmd())
 
 	return cmd
 }

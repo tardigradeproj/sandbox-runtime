@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,19 @@ import (
 const (
 	fakeFirecrackerEnv        = "GO_WANT_FAKE_FIRECRACKER"
 	fakeFirecrackerFailPutEnv = "GO_WANT_FAKE_FIRECRACKER_FAIL_PUT"
+	// fakeFirecrackerReqLogEnv, when set to a file path, makes the fake
+	// process append "<method> <path>" for every request it receives,
+	// so tests can assert on what was actually sent (e.g. that
+	// StartSandbox really issued a PUT /actions).
+	fakeFirecrackerReqLogEnv = "GO_WANT_FAKE_FIRECRACKER_REQ_LOG"
+	// fakeFirecrackerPidFileEnv, when set to a file path, makes the
+	// fake process write its own pid there once it's listening. Tests
+	// whose sandbox is meant to keep running (CreateSandbox/StartSandbox
+	// never kill it, by design) use this to reap the process in
+	// t.Cleanup -- otherwise it inherits this test binary's own
+	// stdout/stderr (see runtime_linux.go) and go test hangs waiting
+	// for that pipe to close.
+	fakeFirecrackerPidFileEnv = "GO_WANT_FAKE_FIRECRACKER_PID_FILE"
 )
 
 // TestMain lets this test binary re-exec itself as a stand-in for the
@@ -86,7 +100,19 @@ func runFakeFirecracker(failPuts bool) {
 	}
 	defer l.Close()
 
+	if pidFile := os.Getenv(fakeFirecrackerPidFileEnv); pidFile != "" {
+		_ = os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
+	}
+
+	reqLogPath := os.Getenv(fakeFirecrackerReqLogEnv)
+
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if reqLogPath != "" {
+			if f, err := os.OpenFile(reqLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+				fmt.Fprintf(f, "%s %s\n", r.Method, r.URL.Path)
+				f.Close()
+			}
+		}
 		if r.Method == http.MethodGet {
 			// waitForSocket polls GET /machine-config as a readiness
 			// probe; it needs a 200 with a body matching
@@ -163,6 +189,28 @@ func newTestRuntimeWithFakeFirecracker(t *testing.T, state string, failPuts bool
 		t.Cleanup(func() { os.Unsetenv(fakeFirecrackerFailPutEnv) })
 	}
 
+	// CreateSandbox/StartSandbox deliberately leave the fake process
+	// running on success (that's the point). It now inherits this test
+	// binary's own stdout/stderr (see runtime_linux.go), so it must be
+	// reaped before this test returns or go test hangs waiting for that
+	// pipe to close.
+	pidFile := filepath.Join(t.TempDir(), "firecracker.pid")
+	require.NoError(t, os.Setenv(fakeFirecrackerPidFileEnv, pidFile))
+	t.Cleanup(func() {
+		os.Unsetenv(fakeFirecrackerPidFileEnv)
+		data, err := os.ReadFile(pidFile)
+		if err != nil {
+			return
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		if err != nil {
+			return
+		}
+		if proc, err := os.FindProcess(pid); err == nil {
+			_ = proc.Kill()
+		}
+	})
+
 	// firecracker.Config.Validate (run as part of Handlers.Run) stats
 	// the kernel image path, so it must exist even though nothing in
 	// this test actually boots a kernel.
@@ -235,7 +283,7 @@ func TestCreateSandboxUnknownImage(t *testing.T) {
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestCreateSandboxCreatesScratchImage(t *testing.T) {
+func TestCreateSandboxCreatesOverlayImage(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "args.txt")
 	fakeMkfsExt4(t, argsFile)
 
@@ -253,15 +301,15 @@ func TestCreateSandboxCreatesScratchImage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "sandbox-1", resp.GetSandboxId())
 
-	scratchPath := filepath.Join(stateDir, resp.GetSandboxId(), "rootfs.ext4")
-	fi, err := os.Stat(scratchPath)
+	overlayPath := filepath.Join(stateDir, resp.GetSandboxId(), "overlay.ext4")
+	fi, err := os.Stat(overlayPath)
 	require.NoError(t, err)
 	assert.EqualValues(t, 4<<30, fi.Size())
 
 	got, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
 	args := strings.Fields(string(got))
-	assert.Equal(t, []string{"-q", "-m", "0", scratchPath}, args)
+	assert.Equal(t, []string{"-q", "-m", "0", overlayPath}, args)
 
 	socketPath := filepath.Join(stateDir, "sandbox-1", "firecracker.sock")
 	_, err = os.Stat(socketPath)
@@ -317,4 +365,48 @@ func TestCreateSandboxCleansUpAfterFirecrackerConfigFailure(t *testing.T) {
 	// whole sandbox dir, not just leave the half-configured mess behind.
 	_, err = os.Stat(filepath.Join(stateDir, "sandbox-1"))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be cleaned up after a firecracker config failure")
+}
+
+func TestStartSandboxRequiresSandboxId(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, err := r.StartSandbox(context.Background(), &v1.StartSandboxRequest{})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestStartSandboxUnknownSandbox(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, err := r.StartSandbox(context.Background(), &v1.StartSandboxRequest{SandboxId: "does-not-exist"})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// TestStartSandboxSuccess creates a real sandbox (fake firecracker
+// process and all, via CreateSandbox) and then starts it, verifying
+// StartSandbox actually sent a PUT /actions to the running process'
+// socket rather than just succeeding vacuously.
+func TestStartSandboxSuccess(t *testing.T) {
+	fakeMkfsExt4(t, filepath.Join(t.TempDir(), "args.txt"))
+
+	reqLogPath := filepath.Join(t.TempDir(), "requests.log")
+	require.NoError(t, os.Setenv(fakeFirecrackerReqLogEnv, reqLogPath))
+	t.Cleanup(func() { os.Unsetenv(fakeFirecrackerReqLogEnv) })
+
+	stateDir := t.TempDir()
+	r, st := newTestRuntimeWithFakeFirecracker(t, stateDir, false)
+	seedRootfsEntry(t, st, "myimage:latest")
+
+	createResp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
+		Config: &v1.SandboxConfig{
+			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources: &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = r.StartSandbox(context.Background(), &v1.StartSandboxRequest{SandboxId: createResp.GetSandboxId()})
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(reqLogPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(got), "PUT /actions")
 }

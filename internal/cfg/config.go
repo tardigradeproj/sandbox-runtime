@@ -10,16 +10,31 @@ import (
 )
 
 type Settings struct {
-	// Rootfs is the directory under which pulled rootfs images are cached
-	Rootfs string `toml:"rootfs" default:"/var/lib/sandbox-runtime/rootfs"`
+	Rootfs Rootfs `toml:"rootfs"`
 	// State is the directory under which per-sandbox microVM state (API
-	// sockets, scratch overlay images, etc.) is placed.
+	// sockets, overlay images, etc.) is placed.
 	State string `toml:"state" default:"/run/sandbox-runtime"`
 	// Version populates VersionResponse.
 	Version string  `toml:"version" default:"0.1.0"`
 	GRPC    GRPC    `toml:"grpc"`
 	Logs    Logs    `toml:"logs"`
 	Runtime Runtime `toml:"runtime"`
+}
+
+// Rootfs holds settings for the local rootfs image cache.
+type Rootfs struct {
+	// Dir is the directory under which pulled rootfs images are cached.
+	Dir string `toml:"dir" default:"/var/lib/sandbox-runtime/rootfs"`
+	// Packer selects how PullRootFS packs a pulled rootfs into an
+	// image.
+	Packer Packer `toml:"packer"`
+}
+
+// Packer configures the filesystem format PullRootFS packs rootfs
+// images into.
+type Packer struct {
+	// Type is "erofs" or "ext4".
+	Type string `toml:"type" default:"erofs"`
 }
 
 // GRPC holds settings for the gRPC server.

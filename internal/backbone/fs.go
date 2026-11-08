@@ -17,6 +17,7 @@ package backbone
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -30,8 +31,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/erofs"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/oci"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/packer"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/rootfs"
 )
 
@@ -40,12 +41,17 @@ type RootFS struct {
 	v1.UnimplementedRootFSServiceServer
 	cfg    *cfg.Settings
 	store  *store.Store
-	packer erofs.Packer
+	packer packer.Packer
 }
 
-// NewRootFS constructs a RootFS backed by store.
-func NewRootFS(cfg *cfg.Settings, store *store.Store) *RootFS {
-	return &RootFS{cfg: cfg, store: store, packer: erofs.MkfsErofsPacker{}}
+// NewRootFS constructs a RootFS backed by store, using the packer
+// format selected by cfg.Rootfs.Packer.Type.
+func NewRootFS(cfg *cfg.Settings, store *store.Store) (*RootFS, error) {
+	pk, err := packer.New(packer.Type(cfg.Rootfs.Packer.Type))
+	if err != nil {
+		return nil, fmt.Errorf("backbone: %w", err)
+	}
+	return &RootFS{cfg: cfg, store: store, packer: pk}, nil
 }
 
 // ListRootFS lists the rootfs images known to the runtime, optionally

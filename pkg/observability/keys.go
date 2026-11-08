@@ -5,7 +5,7 @@ package observability
 const (
 	SandboxID    = "sandbox.id"
 	SandboxImage = "sandbox.image"
-	ScratchPath  = "sandbox.scratch_path"
+	OverlayPath  = "sandbox.overlay_path"
 	SocketPath   = "sandbox.socket_path"
 	LogPath      = "sandbox.log_path"
 

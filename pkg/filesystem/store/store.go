@@ -17,7 +17,7 @@
 //
 // Layout under root:
 //
-//	<root>/images/sha256-<hex>.erofs   the packed image
+//	<root>/images/sha256-<hex>.img    the packed image (erofs, ext4, ...)
 //	<root>/images/sha256-<hex>.json   its metadata sidecar
 //	<root>/tmp/<random>/               scratch space for in-progress pulls
 package store
@@ -91,7 +91,7 @@ func (s *Store) ImagePath(digest string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(s.root, "images", base+".erofs"), nil
+	return filepath.Join(s.root, "images", base+".img"), nil
 }
 
 // Lookup returns the entry for digest, if present.
@@ -145,7 +145,7 @@ func (s *Store) Stage() (extractDir, tmpImagePath string, cleanup func(), err er
 		cleanup()
 		return "", "", nil, fmt.Errorf("store: stage: %w", err)
 	}
-	tmpImagePath = filepath.Join(tmpDir, "image.erofs")
+	tmpImagePath = filepath.Join(tmpDir, "image.img")
 	return extractDir, tmpImagePath, cleanup, nil
 }
 
@@ -157,7 +157,7 @@ func (s *Store) Commit(entry Entry, tmpImagePath string) error {
 	if err != nil {
 		return err
 	}
-	imagePath := filepath.Join(s.root, "images", base+".erofs")
+	imagePath := filepath.Join(s.root, "images", base+".img")
 	if err := os.Rename(tmpImagePath, imagePath); err != nil {
 		return fmt.Errorf("store: commit image: %w", err)
 	}
@@ -219,7 +219,7 @@ func (s *Store) Remove(digest string) error {
 		return err
 	}
 	dir := filepath.Join(s.root, "images")
-	if err := removeIfExists(filepath.Join(dir, base+".erofs")); err != nil {
+	if err := removeIfExists(filepath.Join(dir, base+".img")); err != nil {
 		return err
 	}
 	return removeIfExists(filepath.Join(dir, base+".json"))

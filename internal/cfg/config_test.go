@@ -55,9 +55,14 @@ func writeConfig(t *testing.T, contents string) string {
 
 func TestLoad(t *testing.T) {
 	path := writeConfig(t, `
-rootfs  = "/var/lib/sandbox-runtime/rootfs"
 state = "/srv/fc"
 version = "0.1.0"
+
+[rootfs]
+dir = "/var/lib/sandbox-runtime/rootfs"
+
+[rootfs.packer]
+type = "ext4"
 
 [grpc]
 listen_address = "unix:///var/run/sandbox-runtime.sock"
@@ -80,7 +85,10 @@ show_log_origin = false
 	cfg, err := Load(path)
 	require.NoError(t, err)
 
-	assert.Equal(t, "/var/lib/sandbox-runtime/rootfs", cfg.Rootfs)
+	assert.Equal(t, Rootfs{
+		Dir:    "/var/lib/sandbox-runtime/rootfs",
+		Packer: Packer{Type: "ext4"},
+	}, cfg.Rootfs)
 	assert.Equal(t, "/srv/fc", cfg.State)
 	assert.Equal(t, "0.1.0", cfg.Version)
 	assert.Equal(t, GRPC{
@@ -111,12 +119,17 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	configType := reflect.TypeOf(Settings{})
+	rootfsType := reflect.TypeOf(Rootfs{})
+	packerType := reflect.TypeOf(Packer{})
 	grpcType := reflect.TypeOf(GRPC{})
 	logsType := reflect.TypeOf(Logs{})
 	firecrackerType := reflect.TypeOf(Firecracker{})
 	firecrackerLogType := reflect.TypeOf(FirecrackerLog{})
 
-	assert.Equal(t, defaultTag(t, configType, "Rootfs"), cfg.Rootfs)
+	assert.Equal(t, Rootfs{
+		Dir:    defaultTag(t, rootfsType, "Dir"),
+		Packer: Packer{Type: defaultTag(t, packerType, "Type")},
+	}, cfg.Rootfs)
 	assert.Equal(t, defaultTag(t, configType, "State"), cfg.State)
 	assert.Equal(t, defaultTag(t, configType, "Version"), cfg.Version)
 	assert.Equal(t, GRPC{
@@ -142,7 +155,8 @@ func TestLoadAppliesDefaults(t *testing.T) {
 
 func TestLoadAppliesDefaultsPerField(t *testing.T) {
 	path := writeConfig(t, `
-rootfs = "/custom/rootfs"
+[rootfs]
+dir = "/custom/rootfs"
 
 [logs]
 level = "debug"
@@ -160,7 +174,8 @@ show_level = false
 	firecrackerType := reflect.TypeOf(Firecracker{})
 	firecrackerLogType := reflect.TypeOf(FirecrackerLog{})
 
-	assert.Equal(t, "/custom/rootfs", cfg.Rootfs)
+	assert.Equal(t, "/custom/rootfs", cfg.Rootfs.Dir)
+	assert.Equal(t, defaultTag(t, reflect.TypeOf(Packer{}), "Type"), cfg.Rootfs.Packer.Type)
 	assert.Equal(t, defaultTag(t, reflect.TypeOf(Settings{}), "State"), cfg.State)
 	assert.Equal(t, defaultTag(t, reflect.TypeOf(Settings{}), "Version"), cfg.Version)
 	assert.Equal(t, defaultTag(t, reflect.TypeOf(GRPC{}), "ListenAddress"), cfg.GRPC.ListenAddress)

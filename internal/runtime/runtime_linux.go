@@ -32,9 +32,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// CreateSandbox prepares a sandbox's on-disk state (scratch overlay) and
-// builds the Firecracker microVM configuration for it, without booting
-// the guest. The microVM is actually started by StartSandbox.
+// CreateSandbox prepares a sandbox's on-disk state (writable overlay)
+// and builds the Firecracker microVM configuration for it, without
+// booting the guest. The microVM is actually started by StartSandbox.
 func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxRequest) (*v1.CreateSandboxResponse, error) {
 	config := req.GetConfig()
 
@@ -86,12 +86,12 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	})
 	defer cu.Clean()
 
-	scratchPath := filepath.Join(sandboxDir, "rootfs.ext4")
-	if err := createScratchImage(ctx, scratchPath, storageBytes); err != nil {
-		log.WithError(err).Error("create sandbox: failed to create scratch image")
+	overlayPath := filepath.Join(sandboxDir, "overlay.ext4")
+	if err := createOverlayImage(ctx, overlayPath, storageBytes); err != nil {
+		log.WithError(err).Error("create sandbox: failed to create overlay image")
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
-	log.WithField(obs.ScratchPath, scratchPath).Debug("create sandbox: scratch overlay created")
+	log.WithField(obs.OverlayPath, overlayPath).Debug("create sandbox: overlay created")
 
 	fc := r.cfg.Runtime.Firecracker
 
@@ -110,7 +110,7 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	}
 	drives := firecracker.DrivesBuilder{}.
 		WithRootDrive(rootfsPath, driveOpts...).
-		AddDrive(scratchPath, false).
+		AddDrive(overlayPath, false).
 		Build()
 
 	vcpuCount := int64(math.Ceil(config.GetResources().GetCpu()))
@@ -140,9 +140,16 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		},
 	}
 
+	// Wire the guest's serial console (ttyS0) to our own process's
+	// stdio, same as the SDK's own default command builder does, since
+	// a nil Stdin here means /dev/null -- an immediate EOF that makes
+	// any shell started as init exit right away.
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(fc.Bin).
 		WithSocketPath(socketPath).
+		WithStdin(os.Stdin).
+		WithStdout(os.Stdout).
+		WithStderr(os.Stderr).
 		AddArgs("--id", sandboxID).
 		Build(ctx)
 
@@ -170,13 +177,42 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	cu.Release()
 	log.WithFields(logrus.Fields{
 		obs.RootfsPath:  rootfsPath,
-		obs.ScratchPath: scratchPath,
+		obs.OverlayPath: overlayPath,
 		obs.SocketPath:  socketPath,
 		obs.LogPath:     logPath,
 	}).Info("sandbox created")
 	return &v1.CreateSandboxResponse{SandboxId: sandboxID}, nil
 }
 
-func (r *Runtime) StartSandbox(context.Context, *v1.StartSandboxRequest) (*v1.StartSandboxResponse, error) {
-	panic("implement me!")
+// StartSandbox boots a sandbox that CreateSandbox already spawned and
+// configured, by sending the firecracker process the InstanceStart
+// action over its API socket. It reconnects statelessly via the
+// socket path rather than reusing anything kept in memory from
+// CreateSandbox.
+func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest) (*v1.StartSandboxResponse, error) {
+	sandboxID := req.GetSandboxId()
+	if sandboxID == "" {
+		return nil, status.Error(codes.InvalidArgument, "sandbox_id must be set")
+	}
+	log := logrus.WithField(obs.SandboxID, sandboxID)
+	log.Info("starting sandbox")
+
+	socketPath := filepath.Join(r.cfg.State, sandboxID, "firecracker.sock")
+	if _, err := os.Stat(socketPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "sandbox %q not found", sandboxID)
+		}
+		log.WithError(err).Error("start sandbox: failed to stat socket")
+		return nil, status.Errorf(codes.Internal, "start sandbox: %v", err)
+	}
+
+	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	action := models.InstanceActionInfoActionTypeInstanceStart
+	if _, err := client.CreateSyncAction(ctx, &models.InstanceActionInfo{ActionType: &action}); err != nil {
+		log.WithError(err).Error("start sandbox: failed to start instance")
+		return nil, status.Errorf(codes.Internal, "start sandbox: %v", err)
+	}
+
+	log.Info("sandbox started")
+	return &v1.StartSandboxResponse{}, nil
 }

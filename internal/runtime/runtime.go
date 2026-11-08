@@ -43,9 +43,9 @@ func NewRuntime(cfg *cfg.Settings, store *store.Store) *Runtime {
 	return &Runtime{cfg: cfg, store: store}
 }
 
-// createScratchImage creates a sparse file at path and formats it ext4,
-// for use as the microVM's writable overlay.
-func createScratchImage(ctx context.Context, path string, sizeBytes int64) error {
+// createOverlayImage creates a sparse file at path and formats it
+// ext4, for use as the microVM's writable overlay.
+func createOverlayImage(ctx context.Context, path string, sizeBytes int64) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", path, err)

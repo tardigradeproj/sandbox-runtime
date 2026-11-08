@@ -41,7 +41,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/erofs"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/packer"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 )
 
@@ -117,7 +117,7 @@ func newTestRegistry(t *testing.T, repoTag string) string {
 	return host
 }
 
-func newTestRootFS(t *testing.T, pk erofs.Packer) *RootFS {
+func newTestRootFS(t *testing.T, pk packer.Packer) *RootFS {
 	t.Helper()
 	st, err := store.Open(t.TempDir())
 	require.NoError(t, err)
