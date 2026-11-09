@@ -18,6 +18,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -25,12 +26,22 @@ import (
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/sirupsen/logrus"
+	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/cleanup"
 	obs "github.com/tardigradeproj/sandbox-runtime/pkg/observability"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/sandboxnet"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+const firecrackerSocketName = "firecracker.sock"
+
+// jailerSocketPath mirrors the SDK's own jail() path computation, so
+// StartSandbox can find a jailed sandbox's socket independently.
+func jailerSocketPath(fc cfg.Firecracker, sandboxID string) string {
+	return filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID, "root", firecrackerSocketName)
+}
 
 // CreateSandbox prepares a sandbox's on-disk state (writable overlay)
 // and builds the Firecracker microVM configuration for it, without
@@ -122,13 +133,12 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		memSizeMib = 1
 	}
 
-	socketPath := filepath.Join(sandboxDir, "firecracker.sock")
+	socketPath := filepath.Join(sandboxDir, firecrackerSocketName)
 	logPath := filepath.Join(sandboxDir, "firecracker.log")
 
 	machineCfg := firecracker.Config{
 		VMID:            sandboxID,
 		SocketPath:      socketPath,
-		LogPath:         logPath,
 		LogLevel:        fc.Log.Level,
 		KernelImagePath: kernelImagePath,
 		KernelArgs:      bootArgs,
@@ -140,23 +150,82 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		},
 	}
 
-	// Wire the guest's serial console (ttyS0) to our own process's
-	// stdio, same as the SDK's own default command builder does, since
-	// a nil Stdin here means /dev/null -- an immediate EOF that makes
-	// any shell started as init exit right away.
-	cmd := firecracker.VMCommandBuilder{}.
-		WithBin(fc.Bin).
-		WithSocketPath(socketPath).
-		WithStdin(os.Stdin).
-		WithStdout(os.Stdout).
-		WithStderr(os.Stderr).
-		AddArgs("--id", sandboxID).
-		Build(ctx)
+	var machine *firecracker.Machine
+	if fc.Jailer.Enabled {
+		uid, gid, err := r.resolveJailerUIDGID(fc.Jailer, sandboxID)
+		if err != nil {
+			log.WithError(err).Error("create sandbox: failed to obtain jailer uid/gid")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
 
-	machine, err := firecracker.NewMachine(ctx, machineCfg, firecracker.WithProcessRunner(cmd))
-	if err != nil {
-		log.WithError(err).Error("create sandbox: failed to build firecracker machine config")
-		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		// Hard-linked into the chroot as-is, so the jailed uid/gid
+		// needs write access to the shared inode.
+		if err := os.Chown(overlayPath, uid, gid); err != nil {
+			log.WithError(err).Error("create sandbox: failed to chown overlay image for jailer")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
+
+		if fc.Jailer.UIDGID.Mode == "on_demand" {
+			cu.Add(func() {
+				if err := r.jailerIDs.Release(uid); err != nil {
+					log.WithError(err).Warn("create sandbox: cleanup: failed to release jailer id")
+				}
+			})
+		}
+		cu.Add(func() {
+			chrootDir := filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID)
+			if err := os.RemoveAll(chrootDir); err != nil {
+				log.WithError(err).Warn("create sandbox: cleanup: failed to remove jailer chroot dir")
+			}
+		})
+
+		netNSPath, err := sandboxnet.Create(sandboxID)
+		if err != nil {
+			log.WithError(err).Error("create sandbox: failed to create network namespace")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
+		cu.Add(func() {
+			if err := sandboxnet.Delete(sandboxID); err != nil {
+				log.WithError(err).Warn("create sandbox: cleanup: failed to remove network namespace")
+			}
+		})
+		machineCfg.NetNS = netNSPath
+
+		// LogFifo (not LogPath) gets hard-linked into the chroot by the SDK.
+		logPath = filepath.Join(sandboxDir, "firecracker.fifo")
+		machineCfg.LogFifo = logPath
+		machineCfg.JailerCfg = buildJailerConfig(fc, uid, gid, sandboxID, kernelImagePath)
+
+		// Chroot-relative: the SDK's jail() rewrites this to the real
+		// host path (see jailerSocketPath).
+		machineCfg.SocketPath = firecrackerSocketName
+		socketPath = jailerSocketPath(fc, sandboxID)
+
+		machine, err = firecracker.NewMachine(ctx, machineCfg)
+		if err != nil {
+			log.WithError(err).Error("create sandbox: failed to build firecracker machine config")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
+	} else {
+		machineCfg.LogPath = logPath
+
+		// Wire the guest's console to our own stdio; a nil Stdin
+		// defaults to /dev/null, an immediate EOF.
+		cmd := firecracker.VMCommandBuilder{}.
+			WithBin(fc.Bin).
+			WithSocketPath(socketPath).
+			WithStdin(os.Stdin).
+			WithStdout(os.Stdout).
+			WithStderr(os.Stderr).
+			AddArgs("--id", sandboxID).
+			Build(ctx)
+
+		var err error
+		machine, err = firecracker.NewMachine(ctx, machineCfg, firecracker.WithProcessRunner(cmd))
+		if err != nil {
+			log.WithError(err).Error("create sandbox: failed to build firecracker machine config")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
 	}
 	cu.Add(func() {
 		if err := machine.StopVMM(); err != nil {
@@ -164,10 +233,7 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		}
 	})
 
-	// Run the same handler chain machine.Start would, which spawns the
-	// firecracker process (equivalent to `firecracker --api-sock
-	// <socketPath>`) and configures it over the API, but stop short of
-	// Start's final step, which sends the InstanceStart action.
+	// Same as machine.Start, minus the final InstanceStart action.
 	log.WithField(obs.SocketPath, socketPath).Debug("create sandbox: spawning firecracker process")
 	if err := machine.Handlers.Run(ctx, machine); err != nil {
 		log.WithError(err).Error("create sandbox: failed to spawn/configure firecracker")
@@ -184,6 +250,43 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	return &v1.CreateSandboxResponse{SandboxId: sandboxID}, nil
 }
 
+// resolveJailerUIDGID returns the uid/gid to drop jailer's privileges
+// to for sandboxID, per jc.UIDGID.Mode.
+func (r *Runtime) resolveJailerUIDGID(jc cfg.Jailer, sandboxID string) (uid, gid int, err error) {
+	switch jc.UIDGID.Mode {
+	case "precreated":
+		return *jc.UIDGID.StaticUID, *jc.UIDGID.StaticGID, nil
+	case "on_demand":
+		id, err := r.jailerIDs.Allocate(sandboxID)
+		if err != nil {
+			return 0, 0, fmt.Errorf("allocate jailer id: %w", err)
+		}
+		return id, id, nil
+	default:
+		return 0, 0, fmt.Errorf("unknown jailer uid_gid mode %q", jc.UIDGID.Mode)
+	}
+}
+
+// buildJailerConfig maps jailer config into the SDK's JailerConfig.
+// NumaNode and CgroupVersion are hardcoded, not configurable yet (see
+// TODO.md).
+func buildJailerConfig(fc cfg.Firecracker, uid, gid int, sandboxID, kernelImagePath string) *firecracker.JailerConfig {
+	return &firecracker.JailerConfig{
+		ID:             sandboxID,
+		UID:            firecracker.Int(uid),
+		GID:            firecracker.Int(gid),
+		NumaNode:       firecracker.Int(0),
+		ExecFile:       fc.Bin,
+		JailerBinary:   fc.Jailer.BinPath,
+		ChrootBaseDir:  fc.Jailer.ChrootBaseDir,
+		ChrootStrategy: firecracker.NewNaiveChrootStrategy(kernelImagePath),
+		CgroupVersion:  "2",
+		Stdin:          os.Stdin,
+		Stdout:         os.Stdout,
+		Stderr:         os.Stderr,
+	}
+}
+
 // StartSandbox boots a sandbox that CreateSandbox already spawned and
 // configured, by sending the firecracker process the InstanceStart
 // action over its API socket. It reconnects statelessly via the
@@ -197,7 +300,11 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 	log := logrus.WithField(obs.SandboxID, sandboxID)
 	log.Info("starting sandbox")
 
-	socketPath := filepath.Join(r.cfg.State, sandboxID, "firecracker.sock")
+	fc := r.cfg.Runtime.Firecracker
+	socketPath := filepath.Join(r.cfg.State, sandboxID, firecrackerSocketName)
+	if fc.Jailer.Enabled {
+		socketPath = jailerSocketPath(fc, sandboxID)
+	}
 	if _, err := os.Stat(socketPath); err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "sandbox %q not found", sandboxID)

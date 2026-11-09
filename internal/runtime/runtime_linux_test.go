@@ -36,6 +36,7 @@ import (
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/sandboxnet"
 )
 
 // fakeFirecrackerEnv marks a process as the fake firecracker binary
@@ -172,7 +173,9 @@ func newTestRuntime(t *testing.T, state string) (*Runtime, *store.Store) {
 	t.Helper()
 	st, err := store.Open(t.TempDir())
 	require.NoError(t, err)
-	return NewRuntime(&cfg.Settings{State: state}, st), st
+	r, err := NewRuntime(&cfg.Settings{State: state}, st)
+	require.NoError(t, err)
+	return r, st
 }
 
 // newTestRuntimeWithFakeFirecracker is newTestRuntime, but Firecracker.Bin
@@ -219,7 +222,7 @@ func newTestRuntimeWithFakeFirecracker(t *testing.T, state string, failPuts bool
 
 	st, err := store.Open(t.TempDir())
 	require.NoError(t, err)
-	return NewRuntime(&cfg.Settings{
+	r, err := NewRuntime(&cfg.Settings{
 		State: state,
 		Runtime: cfg.Runtime{
 			Firecracker: cfg.Firecracker{
@@ -227,7 +230,9 @@ func newTestRuntimeWithFakeFirecracker(t *testing.T, state string, failPuts bool
 				KernelImagePath: kernelImagePath,
 			},
 		},
-	}, st), st
+	}, st)
+	require.NoError(t, err)
+	return r, st
 }
 
 func TestCreateSandboxRequiresUid(t *testing.T) {
@@ -365,6 +370,172 @@ func TestCreateSandboxCleansUpAfterFirecrackerConfigFailure(t *testing.T) {
 	// whole sandbox dir, not just leave the half-configured mess behind.
 	_, err = os.Stat(filepath.Join(stateDir, "sandbox-1"))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be cleaned up after a firecracker config failure")
+}
+
+// requireNetNSSupport skips the test if the environment can't create
+// network namespaces (needs CAP_SYS_ADMIN, same as jailer itself).
+func requireNetNSSupport(t *testing.T) {
+	t.Helper()
+	const probe = "sandbox-runtime-netns-probe"
+	if _, err := sandboxnet.Create(probe); err != nil {
+		t.Skipf("network namespaces unavailable: %v", err)
+	}
+	require.NoError(t, sandboxnet.Delete(probe))
+}
+
+func TestCreateSandboxJailerEnabledAttemptsJailerSpawn(t *testing.T) {
+	requireNetNSSupport(t)
+
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+	fakeMkfsExt4(t, argsFile)
+
+	stateDir := t.TempDir()
+	kernelImagePath := filepath.Join(t.TempDir(), "vmlinux")
+	require.NoError(t, os.WriteFile(kernelImagePath, []byte("fake kernel"), 0o644))
+
+	staticUID, staticGID := 1000, 1000
+	st, err := store.Open(t.TempDir())
+	require.NoError(t, err)
+	r, err := NewRuntime(&cfg.Settings{
+		State: stateDir,
+		Runtime: cfg.Runtime{
+			Firecracker: cfg.Firecracker{
+				Bin:             "/usr/local/bin/firecracker",
+				KernelImagePath: kernelImagePath,
+				Jailer: cfg.Jailer{
+					Enabled: true,
+					// Not a real binary: just confirms CreateSandbox
+					// actually attempts jailer rather than falling back.
+					BinPath:       "definitely-not-a-real-jailer-binary",
+					ChrootBaseDir: t.TempDir(),
+					UIDGID:        cfg.UIDGID{Mode: "precreated", StaticUID: &staticUID, StaticGID: &staticGID},
+				},
+			},
+		},
+	}, st)
+	require.NoError(t, err)
+	seedRootfsEntry(t, st, "myimage:latest")
+
+	_, err = r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
+		Config: &v1.SandboxConfig{
+			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources: &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
+			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+		},
+	})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+	// Confirms the failure is from the spawn attempt, i.e. chown ran first and succeeded.
+	assert.Contains(t, err.Error(), "definitely-not-a-real-jailer-binary")
+
+	_, err = os.Stat(filepath.Join(stateDir, "sandbox-1"))
+	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be cleaned up after a jailer spawn failure")
+}
+
+func TestBuildJailerConfig(t *testing.T) {
+	fc := cfg.Firecracker{
+		Bin: "/usr/local/bin/firecracker",
+		Jailer: cfg.Jailer{
+			BinPath:       "/usr/bin/jailer",
+			ChrootBaseDir: "/run/sandbox-runtime/jailer",
+		},
+	}
+
+	jc := buildJailerConfig(fc, 123, 456, "sandbox-1", "/var/lib/sandbox-runtime/vmlinux")
+
+	require.NotNil(t, jc)
+	assert.Equal(t, "sandbox-1", jc.ID)
+	require.NotNil(t, jc.UID)
+	assert.Equal(t, 123, *jc.UID)
+	require.NotNil(t, jc.GID)
+	assert.Equal(t, 456, *jc.GID)
+	require.NotNil(t, jc.NumaNode)
+	assert.Equal(t, 0, *jc.NumaNode)
+	assert.Equal(t, "/usr/local/bin/firecracker", jc.ExecFile)
+	assert.Equal(t, "/usr/bin/jailer", jc.JailerBinary)
+	assert.Equal(t, "/run/sandbox-runtime/jailer", jc.ChrootBaseDir)
+	assert.Equal(t, "2", jc.CgroupVersion)
+	assert.NotNil(t, jc.ChrootStrategy)
+	assert.Equal(t, os.Stdin, jc.Stdin)
+	assert.Equal(t, os.Stdout, jc.Stdout)
+	assert.Equal(t, os.Stderr, jc.Stderr)
+}
+
+func TestResolveJailerUIDGIDPrecreated(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	staticUID, staticGID := 100, 200
+	jc := cfg.Jailer{UIDGID: cfg.UIDGID{Mode: "precreated", StaticUID: &staticUID, StaticGID: &staticGID}}
+
+	uid, gid, err := r.resolveJailerUIDGID(jc, "sandbox-1")
+	require.NoError(t, err)
+	assert.Equal(t, 100, uid)
+	assert.Equal(t, 200, gid)
+}
+
+func TestResolveJailerUIDGIDOnDemand(t *testing.T) {
+	start, end := 100000, 100001
+	st, err := store.Open(t.TempDir())
+	require.NoError(t, err)
+	r, err := NewRuntime(&cfg.Settings{
+		State: t.TempDir(),
+		Runtime: cfg.Runtime{Firecracker: cfg.Firecracker{Jailer: cfg.Jailer{
+			Enabled:       true,
+			ChrootBaseDir: t.TempDir(),
+			UIDGID:        cfg.UIDGID{Mode: "on_demand", RangeStart: &start, RangeEnd: &end},
+		}}},
+	}, st)
+	require.NoError(t, err)
+
+	jc := r.cfg.Runtime.Firecracker.Jailer
+
+	uid1, gid1, err := r.resolveJailerUIDGID(jc, "sandbox-1")
+	require.NoError(t, err)
+	assert.Equal(t, uid1, gid1)
+
+	uid2, gid2, err := r.resolveJailerUIDGID(jc, "sandbox-2")
+	require.NoError(t, err)
+	assert.Equal(t, uid2, gid2)
+	assert.NotEqual(t, uid1, uid2)
+
+	// Range exhausted: a third allocation must fail.
+	_, _, err = r.resolveJailerUIDGID(jc, "sandbox-3")
+	assert.Error(t, err)
+
+	require.NoError(t, r.jailerIDs.Release(uid1))
+	uid3, _, err := r.resolveJailerUIDGID(jc, "sandbox-4")
+	require.NoError(t, err)
+	assert.Equal(t, uid1, uid3, "expected the released id to be reused")
+}
+
+func TestResolveJailerUIDGIDUnknownMode(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, _, err := r.resolveJailerUIDGID(cfg.Jailer{UIDGID: cfg.UIDGID{Mode: "bogus"}}, "sandbox-1")
+	assert.Error(t, err)
+}
+
+// jailer requires --chroot-base-dir to already exist.
+func TestNewRuntimeCreatesJailerChrootBaseDir(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	require.NoError(t, err)
+
+	staticUID, staticGID := 1000, 1000
+	chrootBaseDir := filepath.Join(t.TempDir(), "jailer")
+	_, err = os.Stat(chrootBaseDir)
+	require.True(t, os.IsNotExist(err), "precondition: chroot base dir must not already exist")
+
+	_, err = NewRuntime(&cfg.Settings{
+		State: t.TempDir(),
+		Runtime: cfg.Runtime{Firecracker: cfg.Firecracker{Jailer: cfg.Jailer{
+			Enabled:       true,
+			ChrootBaseDir: chrootBaseDir,
+			UIDGID:        cfg.UIDGID{Mode: "precreated", StaticUID: &staticUID, StaticGID: &staticGID},
+		}}},
+	}, st)
+	require.NoError(t, err)
+
+	info, err := os.Stat(chrootBaseDir)
+	require.NoError(t, err, "expected NewRuntime to create the jailer chroot base dir")
+	assert.True(t, info.IsDir())
 }
 
 func TestStartSandboxRequiresSandboxId(t *testing.T) {

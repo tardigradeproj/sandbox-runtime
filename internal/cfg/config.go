@@ -66,6 +66,32 @@ type Firecracker struct {
 	KernelImagePath string         `toml:"kernel_image_path" default:"/var/lib/sandbox-runtime/vmlinux"`
 	DefaultBootArgs string         `toml:"default_boot_args" default:"console=ttyS0 reboot=k panic=1 pci=off"`
 	Log             FirecrackerLog `toml:"log"`
+	Jailer          Jailer         `toml:"jailer"`
+}
+
+// Jailer configures running Firecracker under the jailer binary.
+type Jailer struct {
+	Enabled bool `toml:"enabled" default:"false"`
+	// BinPath is resolved via PATH if it contains no path separators.
+	BinPath string `toml:"bin_path" default:"jailer"`
+	// ChrootBaseDir must be on the same filesystem as the rootfs
+	// store and overlay images: jailer hard-links them into the chroot.
+	ChrootBaseDir string `toml:"chroot_base_dir" default:"/run/sandbox-runtime/jailer"`
+	UIDGID        UIDGID `toml:"uid_gid"`
+}
+
+// UIDGID controls how the uid/gid jailer drops privileges to is
+// obtained for each sandbox: Mode is "precreated" (reuse
+// StaticUID/StaticGID) or "on_demand" (allocate from
+// [RangeStart, RangeEnd], released on teardown).
+type UIDGID struct {
+	Mode string `toml:"mode" default:"precreated"`
+	// No default: must be set explicitly when Mode == "precreated".
+	StaticUID *int `toml:"static_uid"`
+	StaticGID *int `toml:"static_gid"`
+	// Used when Mode == "on_demand".
+	RangeStart *int `toml:"range_start"`
+	RangeEnd   *int `toml:"range_end"`
 }
 
 // FirecrackerLog configures firecracker's own logger. LogPath isn't
@@ -91,11 +117,21 @@ func applyDefaults(v reflect.Value) {
 				}
 			}
 		case reflect.Pointer:
-			if field.IsNil() && field.Type().Elem().Kind() == reflect.Bool {
-				if def, ok := t.Field(i).Tag.Lookup("default"); ok {
-					if b, err := strconv.ParseBool(def); err == nil {
-						field.Set(reflect.ValueOf(&b))
-					}
+			if !field.IsNil() {
+				continue
+			}
+			def, ok := t.Field(i).Tag.Lookup("default")
+			if !ok {
+				continue
+			}
+			switch field.Type().Elem().Kind() {
+			case reflect.Bool:
+				if b, err := strconv.ParseBool(def); err == nil {
+					field.Set(reflect.ValueOf(&b))
+				}
+			case reflect.Int:
+				if n, err := strconv.Atoi(def); err == nil {
+					field.Set(reflect.ValueOf(&n))
 				}
 			}
 		}
@@ -114,5 +150,33 @@ func Load(path string) (*Settings, error) {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
 	}
 	applyDefaults(reflect.ValueOf(&cfg).Elem())
+	if err := validate(&cfg); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
 	return &cfg, nil
+}
+
+// validate checks invariants applyDefaults can't express via a plain
+// "default" tag.
+func validate(cfg *Settings) error {
+	j := cfg.Runtime.Firecracker.Jailer
+	if !j.Enabled {
+		return nil
+	}
+	switch j.UIDGID.Mode {
+	case "precreated":
+		if j.UIDGID.StaticUID == nil || j.UIDGID.StaticGID == nil {
+			return fmt.Errorf("runtime.firecracker.jailer.uid_gid: static_uid and static_gid must be set when mode is %q", j.UIDGID.Mode)
+		}
+	case "on_demand":
+		if j.UIDGID.RangeStart == nil || j.UIDGID.RangeEnd == nil {
+			return fmt.Errorf("runtime.firecracker.jailer.uid_gid: range_start and range_end must be set when mode is %q", j.UIDGID.Mode)
+		}
+		if *j.UIDGID.RangeStart > *j.UIDGID.RangeEnd {
+			return fmt.Errorf("runtime.firecracker.jailer.uid_gid: range_start %d must be <= range_end %d", *j.UIDGID.RangeStart, *j.UIDGID.RangeEnd)
+		}
+	default:
+		return fmt.Errorf("runtime.firecracker.jailer.uid_gid: mode must be %q or %q, got %q", "precreated", "on_demand", j.UIDGID.Mode)
+	}
+	return nil
 }

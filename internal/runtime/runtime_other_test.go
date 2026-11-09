@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -29,13 +30,15 @@ import (
 )
 
 func TestCreateSandboxUnimplementedOffLinux(t *testing.T) {
-	r := NewRuntime(&cfg.Settings{State: t.TempDir()}, nil)
-	_, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{})
+	r, err := NewRuntime(&cfg.Settings{State: t.TempDir()}, nil)
+	require.NoError(t, err)
+	_, err = r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{})
 	assert.Equal(t, codes.Unimplemented, status.Code(err))
 }
 
 func TestStartSandboxUnimplementedOffLinux(t *testing.T) {
-	r := NewRuntime(&cfg.Settings{State: t.TempDir()}, nil)
-	_, err := r.StartSandbox(context.Background(), &v1.StartSandboxRequest{})
+	r, err := NewRuntime(&cfg.Settings{State: t.TempDir()}, nil)
+	require.NoError(t, err)
+	_, err = r.StartSandbox(context.Background(), &v1.StartSandboxRequest{})
 	assert.Equal(t, codes.Unimplemented, status.Code(err))
 }
