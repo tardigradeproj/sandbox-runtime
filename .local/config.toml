@@ -1,4 +1,4 @@
-state   = "/run/sandbox-runtime"
+state   = "/var/sandbox-runtime"
 version = "0.1.0"
 
 [rootfs]
@@ -23,3 +23,20 @@ default_boot_args  = "console=ttyS0 reboot=k panic=1 pci=off init=/init"
 level           = "Info"
 show_level      = true
 show_log_origin = false
+
+[runtime.firecracker.jailer]
+# Disabled here: this dev/test container doesn't install a jailer
+# binary (see .local/Dockerfile). Flip on and set bin_path once it
+# does.
+enabled         = true
+bin_path        = "/usr/local/bin/jailer"
+chroot_base_dir = "/var/sandbox-runtime/jailer"
+
+[runtime.firecracker.jailer.uid_gid]
+# "on_demand" allocates a fresh uid/gid per sandbox from the range
+# below instead of reusing one fixed pair -- the advisable setup in
+# production. Switch to mode = "precreated" with static_uid/static_gid
+# to reuse one fixed pair instead.
+mode        = "on_demand"
+range_start = 100000
+range_end   = 100999
