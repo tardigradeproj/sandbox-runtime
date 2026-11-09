@@ -15,9 +15,7 @@
 //go:build linux
 
 // Package network provisions per-sandbox networking (namespace, tap
-// device, veth-to-bridge egress, IP) for one node. It has no
-// knowledge of Firecracker, jailer, or rootfs -- it only ever deals
-// in sandbox IDs and plain strings. See net-design.md.
+// device, veth-to-bridge egress, IP) for one node. See net-design.md.
 package network
 
 import (
@@ -31,42 +29,33 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/tardigradeproj/sandbox-runtime/pkg/sandboxnet"
 )
 
 const (
 	// TapDeviceName is the tap device created inside every sandbox's
-	// own netns for the guest NIC (see Attach), e.g. for Firecracker's
-	// NetworkInterface.host_dev_name. Hardcoded, not per-sandbox:
-	// every sandbox has its own isolated namespace, so this name never
-	// collides across sandboxes.
+	// own netns for the guest NIC, e.g. Firecracker's
+	// NetworkInterface.host_dev_name. Fixed, not per-sandbox: each
+	// sandbox has its own namespace, so it never collides.
 	TapDeviceName = "tap0"
-	// IfaceID identifies the sandbox's guest NIC in Firecracker's own
-	// API (PUT /network-interfaces/{iface_id}). Hardcoded for the same
-	// reason as TapDeviceName.
+	// IfaceID identifies the sandbox's guest NIC in Firecracker's
+	// network-interfaces API. Fixed for the same reason as TapDeviceName.
 	IfaceID = "net0"
 )
 
-// NetnsPath returns the network namespace path Attach creates for
-// sandboxID (see sandboxnet.Create). By convention, not by lookup:
-// callers that only need to point jailer/Firecracker at a sandbox's
-// namespace (e.g. CreateSandbox) can compute this directly instead of
-// calling Attach themselves -- provisioning that namespace is
-// NetworkService's job, done independently.
+// NetnsPath returns the namespace path Attach creates for sandboxID,
+// by convention -- so a caller that only needs to point
+// jailer/Firecracker at it (CreateSandbox) doesn't have to call
+// Attach itself.
 func NetnsPath(sandboxID string) string {
-	return filepath.Join(sandboxnet.Dir, sandboxID)
+	return filepath.Join(netnsDir, sandboxID)
 }
 
-// Attachment is what AttachNetwork hands back: everything the caller
-// needs to actually run a sandbox, in generic terms.
+// Attachment is what Attach hands back.
 type Attachment struct {
-	// NetnsPath is the network namespace to run the sandbox in, e.g.
-	// for jailer's --netns.
+	// NetnsPath is the namespace to run the sandbox in, e.g. for
+	// jailer's --netns.
 	NetnsPath string
-	// IPAddress is the sandbox's address, in CIDR form.
 	IPAddress string
-	// GatewayIP is the address the sandbox routes through.
 	GatewayIP string
 }
 
@@ -156,17 +145,16 @@ func (n *Network) ensureNAT(ctx context.Context) error {
 
 // Attach provisions networking for sandboxID: a namespace, a tap
 // device inside it for the guest NIC, and a veth pair out to this
-// node's bridge for egress. Idempotent only in the sense that
-// retrying after a partial failure is safe to call again once any
-// leftover state is cleaned up by Detach; it does not itself detect
-// an already-attached sandbox.
+// node's bridge for egress. Does not itself detect an
+// already-attached sandbox; retry after a partial failure once
+// Detach has cleaned up.
 func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, error) {
 	ip, err := n.ips.Allocate(sandboxID)
 	if err != nil {
 		return Attachment{}, fmt.Errorf("network: allocate ip: %w", err)
 	}
 
-	netnsPath, err := sandboxnet.Create(sandboxID)
+	netnsPath, err := createNetns(sandboxID)
 	if err != nil {
 		return Attachment{}, fmt.Errorf("network: create namespace: %w", err)
 	}
@@ -204,15 +192,14 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 // each step tolerates "already gone."
 func (n *Network) Detach(ctx context.Context, sandboxID string) error {
 	_ = run(ctx, "ip", "link", "delete", vethHostName(sandboxID)) // cascades into the netns
-	_ = sandboxnet.Delete(sandboxID)                              // takes tap0 down with it
+	_ = deleteNetns(sandboxID)                                    // takes tap0 down with it
 	return n.ips.Release(sandboxID)
 }
 
-// vethHostName derives a short, unique, valid interface name from
-// sandboxID (Linux interface names are capped at 15 characters),
-// since -- unlike tap0 and veth-ns, which live inside each sandbox's
-// own namespace -- the host-side veth end lives on the shared bridge
-// and does need to be unique across sandboxes.
+// vethHostName derives a short, unique interface name from sandboxID
+// (Linux names are capped at 15 characters): unlike tap0/veth-ns,
+// which live inside the sandbox's own namespace, this end lives on
+// the shared bridge and must be unique across sandboxes.
 func vethHostName(sandboxID string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(sandboxID))

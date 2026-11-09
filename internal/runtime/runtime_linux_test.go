@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -36,7 +37,6 @@ import (
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/sandboxnet"
 )
 
 // fakeFirecrackerEnv marks a process as the fake firecracker binary
@@ -377,10 +377,10 @@ func TestCreateSandboxCleansUpAfterFirecrackerConfigFailure(t *testing.T) {
 func requireNetNSSupport(t *testing.T) {
 	t.Helper()
 	const probe = "sandbox-runtime-netns-probe"
-	if _, err := sandboxnet.Create(probe); err != nil {
+	if err := exec.Command("ip", "netns", "add", probe).Run(); err != nil {
 		t.Skipf("network namespaces unavailable: %v", err)
 	}
-	require.NoError(t, sandboxnet.Delete(probe))
+	require.NoError(t, exec.Command("ip", "netns", "delete", probe).Run())
 }
 
 func TestCreateSandboxJailerEnabledAttemptsJailerSpawn(t *testing.T) {

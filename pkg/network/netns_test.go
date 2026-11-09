@@ -14,7 +14,7 @@
 
 //go:build linux
 
-package sandboxnet
+package network
 
 import (
 	"os"
@@ -25,48 +25,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// requireSupport skips the test if the environment can't create
-// network namespaces (needs CAP_SYS_ADMIN).
-func requireSupport(t *testing.T) {
-	t.Helper()
-	const probe = "sandboxnet-probe"
-	if _, err := Create(probe); err != nil {
-		t.Skipf("network namespaces unavailable: %v", err)
-	}
-	require.NoError(t, Delete(probe))
-}
-
-func TestCreateAndDelete(t *testing.T) {
+func TestCreateDeleteNetns(t *testing.T) {
 	requireSupport(t)
 
-	const name = "test-sandboxnet"
-	path, err := Create(name)
+	const name = "test-netns"
+	path, err := createNetns(name)
 	require.NoError(t, err)
 
-	assert.Equal(t, filepath.Join(Dir, name), path)
+	assert.Equal(t, filepath.Join(netnsDir, name), path)
 	_, err = os.Stat(path)
 	assert.NoError(t, err, "expected the namespace's bind-mounted path to exist")
 
-	require.NoError(t, Delete(name))
+	require.NoError(t, deleteNetns(name))
 	_, err = os.Stat(path)
-	assert.True(t, os.IsNotExist(err), "expected the namespace's path to be gone after Delete")
+	assert.True(t, os.IsNotExist(err), "expected the namespace's path to be gone after delete")
 }
 
-func TestCreateDuplicateFails(t *testing.T) {
+func TestCreateNetnsDuplicateFails(t *testing.T) {
 	requireSupport(t)
 
-	const name = "test-sandboxnet-dup"
-	_, err := Create(name)
+	const name = "test-netns-dup"
+	_, err := createNetns(name)
 	require.NoError(t, err)
-	defer Delete(name)
+	defer deleteNetns(name)
 
-	_, err = Create(name)
+	_, err = createNetns(name)
 	assert.Error(t, err)
 }
 
-func TestDeleteUnknownFails(t *testing.T) {
+func TestDeleteNetnsUnknownFails(t *testing.T) {
 	requireSupport(t)
-
-	err := Delete("does-not-exist")
-	assert.Error(t, err)
+	assert.Error(t, deleteNetns("does-not-exist"))
 }
