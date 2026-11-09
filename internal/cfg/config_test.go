@@ -108,6 +108,12 @@ show_log_origin = false
 				ShowLevel:     boolPtr(true),
 				ShowLogOrigin: boolPtr(false),
 			},
+			Jailer: Jailer{
+				Enabled:       false,
+				BinPath:       defaultTag(t, reflect.TypeOf(Jailer{}), "BinPath"),
+				ChrootBaseDir: defaultTag(t, reflect.TypeOf(Jailer{}), "ChrootBaseDir"),
+				UIDGID:        UIDGID{Mode: defaultTag(t, reflect.TypeOf(UIDGID{}), "Mode")},
+			},
 		},
 	}, cfg.Runtime)
 }
@@ -139,6 +145,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		Level:  defaultTag(t, logsType, "Level"),
 		Format: defaultTag(t, logsType, "Format"),
 	}, cfg.Logs)
+	jailerType := reflect.TypeOf(Jailer{})
+	uidGIDType := reflect.TypeOf(UIDGID{})
+
 	assert.Equal(t, Runtime{
 		Firecracker: Firecracker{
 			Bin:             defaultTag(t, firecrackerType, "Bin"),
@@ -148,6 +157,11 @@ func TestLoadAppliesDefaults(t *testing.T) {
 				Level:         defaultTag(t, firecrackerLogType, "Level"),
 				ShowLevel:     defaultBoolTag(t, firecrackerLogType, "ShowLevel"),
 				ShowLogOrigin: defaultBoolTag(t, firecrackerLogType, "ShowLogOrigin"),
+			},
+			Jailer: Jailer{
+				BinPath:       defaultTag(t, jailerType, "BinPath"),
+				ChrootBaseDir: defaultTag(t, jailerType, "ChrootBaseDir"),
+				UIDGID:        UIDGID{Mode: defaultTag(t, uidGIDType, "Mode")},
 			},
 		},
 	}, cfg.Runtime)
@@ -188,6 +202,113 @@ show_level = false
 	require.NotNil(t, cfg.Runtime.Firecracker.Log.ShowLevel)
 	assert.False(t, *cfg.Runtime.Firecracker.Log.ShowLevel)
 	assert.Equal(t, defaultBoolTag(t, firecrackerLogType, "ShowLogOrigin"), cfg.Runtime.Firecracker.Log.ShowLogOrigin)
+}
+
+func TestLoadJailerDefaultsWhenDisabled(t *testing.T) {
+	path := writeConfig(t, ``)
+
+	cfg, err := Load(path)
+	require.NoError(t, err)
+
+	j := cfg.Runtime.Firecracker.Jailer
+	assert.False(t, j.Enabled)
+	assert.Equal(t, defaultTag(t, reflect.TypeOf(Jailer{}), "BinPath"), j.BinPath)
+	assert.Equal(t, defaultTag(t, reflect.TypeOf(Jailer{}), "ChrootBaseDir"), j.ChrootBaseDir)
+	assert.Equal(t, defaultTag(t, reflect.TypeOf(UIDGID{}), "Mode"), j.UIDGID.Mode)
+	assert.Nil(t, j.UIDGID.StaticUID)
+	assert.Nil(t, j.UIDGID.StaticGID)
+	assert.Nil(t, j.UIDGID.RangeStart)
+	assert.Nil(t, j.UIDGID.RangeEnd)
+}
+
+func TestLoadJailerPrecreatedRequiresStaticUIDAndGID(t *testing.T) {
+	path := writeConfig(t, `
+[runtime.firecracker.jailer]
+enabled = true
+
+[runtime.firecracker.jailer.uid_gid]
+mode = "precreated"
+`)
+	_, err := Load(path)
+	assert.Error(t, err)
+}
+
+func TestLoadJailerPrecreatedWithStaticUIDAndGIDSucceeds(t *testing.T) {
+	path := writeConfig(t, `
+[runtime.firecracker.jailer]
+enabled = true
+
+[runtime.firecracker.jailer.uid_gid]
+mode = "precreated"
+static_uid = 123
+static_gid = 456
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+
+	j := cfg.Runtime.Firecracker.Jailer
+	require.NotNil(t, j.UIDGID.StaticUID)
+	require.NotNil(t, j.UIDGID.StaticGID)
+	assert.Equal(t, 123, *j.UIDGID.StaticUID)
+	assert.Equal(t, 456, *j.UIDGID.StaticGID)
+}
+
+func TestLoadJailerOnDemandRequiresRange(t *testing.T) {
+	path := writeConfig(t, `
+[runtime.firecracker.jailer]
+enabled = true
+
+[runtime.firecracker.jailer.uid_gid]
+mode = "on_demand"
+`)
+	_, err := Load(path)
+	assert.Error(t, err)
+}
+
+func TestLoadJailerOnDemandRejectsInvalidRange(t *testing.T) {
+	path := writeConfig(t, `
+[runtime.firecracker.jailer]
+enabled = true
+
+[runtime.firecracker.jailer.uid_gid]
+mode = "on_demand"
+range_start = 2000
+range_end = 1000
+`)
+	_, err := Load(path)
+	assert.Error(t, err)
+}
+
+func TestLoadJailerOnDemandWithValidRangeSucceeds(t *testing.T) {
+	path := writeConfig(t, `
+[runtime.firecracker.jailer]
+enabled = true
+
+[runtime.firecracker.jailer.uid_gid]
+mode = "on_demand"
+range_start = 100000
+range_end = 100999
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+
+	j := cfg.Runtime.Firecracker.Jailer
+	require.NotNil(t, j.UIDGID.RangeStart)
+	require.NotNil(t, j.UIDGID.RangeEnd)
+	assert.Equal(t, 100000, *j.UIDGID.RangeStart)
+	assert.Equal(t, 100999, *j.UIDGID.RangeEnd)
+}
+
+func TestLoadJailerRejectsUnknownMode(t *testing.T) {
+	path := writeConfig(t, `
+[runtime.firecracker.jailer]
+enabled = true
+
+[runtime.firecracker.jailer.uid_gid]
+mode = "bogus"
+`)
+	_, err := Load(path)
+	assert.Error(t, err)
 }
 
 func TestLoadMissingFile(t *testing.T) {

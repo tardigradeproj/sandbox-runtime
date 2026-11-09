@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/idalloc"
 )
 
 // mkfsExt4Bin is the mkfs.ext4 binary to invoke; overridable in tests.
@@ -36,11 +38,29 @@ type Runtime struct {
 	v1.UnimplementedRuntimeServiceServer
 	cfg   *cfg.Settings
 	store *store.Store
+	// jailerIDs is set when jailer's uid_gid.mode is "on_demand".
+	jailerIDs *idalloc.Allocator
 }
 
 // NewRuntime constructs a Runtime.
-func NewRuntime(cfg *cfg.Settings, store *store.Store) *Runtime {
-	return &Runtime{cfg: cfg, store: store}
+func NewRuntime(cfg *cfg.Settings, store *store.Store) (*Runtime, error) {
+	r := &Runtime{cfg: cfg, store: store}
+
+	j := cfg.Runtime.Firecracker.Jailer
+	if j.Enabled {
+		// jailer requires --chroot-base-dir to already exist.
+		if err := os.MkdirAll(j.ChrootBaseDir, 0o755); err != nil {
+			return nil, fmt.Errorf("failed to create jailer chroot base dir: %w", err)
+		}
+		if j.UIDGID.Mode == "on_demand" {
+			a, err := idalloc.Open(filepath.Join(cfg.State, "jailer-ids"), *j.UIDGID.RangeStart, *j.UIDGID.RangeEnd)
+			if err != nil {
+				return nil, fmt.Errorf("failed to open jailer id allocator: %w", err)
+			}
+			r.jailerIDs = a
+		}
+	}
+	return r, nil
 }
 
 // createOverlayImage creates a sparse file at path and formats it
