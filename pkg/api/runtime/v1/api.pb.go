@@ -35,6 +35,205 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type AttachNetworkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachNetworkRequest) Reset() {
+	*x = AttachNetworkRequest{}
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachNetworkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachNetworkRequest) ProtoMessage() {}
+
+func (x *AttachNetworkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachNetworkRequest.ProtoReflect.Descriptor instead.
+func (*AttachNetworkRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *AttachNetworkRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+type AttachNetworkResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// NetnsPath is the network namespace to run the sandbox in, e.g. for
+	// jailer's --netns.
+	NetnsPath string `protobuf:"bytes,1,opt,name=netns_path,json=netnsPath,proto3" json:"netns_path,omitempty"`
+	// TapDevice is the tap device created inside that namespace for the
+	// guest's NIC, e.g. for Firecracker's NetworkInterface.host_dev_name.
+	TapDevice string `protobuf:"bytes,2,opt,name=tap_device,json=tapDevice,proto3" json:"tap_device,omitempty"`
+	// IpAddress is the address assigned to the sandbox, in CIDR form (e.g.
+	// "10.200.5.14/24").
+	IpAddress string `protobuf:"bytes,3,opt,name=ip_address,json=ipAddress,proto3" json:"ip_address,omitempty"`
+	// GatewayIp is the address the sandbox should route through.
+	GatewayIp     string `protobuf:"bytes,4,opt,name=gateway_ip,json=gatewayIp,proto3" json:"gateway_ip,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachNetworkResponse) Reset() {
+	*x = AttachNetworkResponse{}
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachNetworkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachNetworkResponse) ProtoMessage() {}
+
+func (x *AttachNetworkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachNetworkResponse.ProtoReflect.Descriptor instead.
+func (*AttachNetworkResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AttachNetworkResponse) GetNetnsPath() string {
+	if x != nil {
+		return x.NetnsPath
+	}
+	return ""
+}
+
+func (x *AttachNetworkResponse) GetTapDevice() string {
+	if x != nil {
+		return x.TapDevice
+	}
+	return ""
+}
+
+func (x *AttachNetworkResponse) GetIpAddress() string {
+	if x != nil {
+		return x.IpAddress
+	}
+	return ""
+}
+
+func (x *AttachNetworkResponse) GetGatewayIp() string {
+	if x != nil {
+		return x.GatewayIp
+	}
+	return ""
+}
+
+type DetachNetworkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DetachNetworkRequest) Reset() {
+	*x = DetachNetworkRequest{}
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DetachNetworkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DetachNetworkRequest) ProtoMessage() {}
+
+func (x *DetachNetworkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DetachNetworkRequest.ProtoReflect.Descriptor instead.
+func (*DetachNetworkRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DetachNetworkRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+type DetachNetworkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DetachNetworkResponse) Reset() {
+	*x = DetachNetworkResponse{}
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DetachNetworkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DetachNetworkResponse) ProtoMessage() {}
+
+func (x *DetachNetworkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DetachNetworkResponse.ProtoReflect.Descriptor instead.
+func (*DetachNetworkResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{3}
+}
+
 // RootFSSpec identifies a rootfs the caller wants to resolve, pull, or
 // remove.
 type RootFSSpec struct {
@@ -51,7 +250,7 @@ type RootFSSpec struct {
 
 func (x *RootFSSpec) Reset() {
 	*x = RootFSSpec{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[0]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -63,7 +262,7 @@ func (x *RootFSSpec) String() string {
 func (*RootFSSpec) ProtoMessage() {}
 
 func (x *RootFSSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[0]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -76,7 +275,7 @@ func (x *RootFSSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootFSSpec.ProtoReflect.Descriptor instead.
 func (*RootFSSpec) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{0}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RootFSSpec) GetImage() string {
@@ -113,7 +312,7 @@ type RootFS struct {
 
 func (x *RootFS) Reset() {
 	*x = RootFS{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[1]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -125,7 +324,7 @@ func (x *RootFS) String() string {
 func (*RootFS) ProtoMessage() {}
 
 func (x *RootFS) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[1]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -138,7 +337,7 @@ func (x *RootFS) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootFS.ProtoReflect.Descriptor instead.
 func (*RootFS) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{1}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RootFS) GetId() string {
@@ -186,7 +385,7 @@ type RootFSFilter struct {
 
 func (x *RootFSFilter) Reset() {
 	*x = RootFSFilter{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[2]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -198,7 +397,7 @@ func (x *RootFSFilter) String() string {
 func (*RootFSFilter) ProtoMessage() {}
 
 func (x *RootFSFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[2]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -211,7 +410,7 @@ func (x *RootFSFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootFSFilter.ProtoReflect.Descriptor instead.
 func (*RootFSFilter) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{2}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RootFSFilter) GetSpec() *RootFSSpec {
@@ -230,7 +429,7 @@ type ListRootFSRequest struct {
 
 func (x *ListRootFSRequest) Reset() {
 	*x = ListRootFSRequest{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[3]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -242,7 +441,7 @@ func (x *ListRootFSRequest) String() string {
 func (*ListRootFSRequest) ProtoMessage() {}
 
 func (x *ListRootFSRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[3]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -255,7 +454,7 @@ func (x *ListRootFSRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRootFSRequest.ProtoReflect.Descriptor instead.
 func (*ListRootFSRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{3}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListRootFSRequest) GetFilter() *RootFSFilter {
@@ -274,7 +473,7 @@ type ListRootFSResponse struct {
 
 func (x *ListRootFSResponse) Reset() {
 	*x = ListRootFSResponse{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[4]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -286,7 +485,7 @@ func (x *ListRootFSResponse) String() string {
 func (*ListRootFSResponse) ProtoMessage() {}
 
 func (x *ListRootFSResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[4]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -299,7 +498,7 @@ func (x *ListRootFSResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRootFSResponse.ProtoReflect.Descriptor instead.
 func (*ListRootFSResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{4}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListRootFSResponse) GetRootfs() []*RootFS {
@@ -321,7 +520,7 @@ type RootFSStatusRequest struct {
 
 func (x *RootFSStatusRequest) Reset() {
 	*x = RootFSStatusRequest{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[5]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -333,7 +532,7 @@ func (x *RootFSStatusRequest) String() string {
 func (*RootFSStatusRequest) ProtoMessage() {}
 
 func (x *RootFSStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[5]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -346,7 +545,7 @@ func (x *RootFSStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootFSStatusRequest.ProtoReflect.Descriptor instead.
 func (*RootFSStatusRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{5}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RootFSStatusRequest) GetSpec() *RootFSSpec {
@@ -375,7 +574,7 @@ type RootFSStatusResponse struct {
 
 func (x *RootFSStatusResponse) Reset() {
 	*x = RootFSStatusResponse{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[6]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -387,7 +586,7 @@ func (x *RootFSStatusResponse) String() string {
 func (*RootFSStatusResponse) ProtoMessage() {}
 
 func (x *RootFSStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[6]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -400,7 +599,7 @@ func (x *RootFSStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootFSStatusResponse.ProtoReflect.Descriptor instead.
 func (*RootFSStatusResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{6}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RootFSStatusResponse) GetRootfs() *RootFS {
@@ -426,7 +625,7 @@ type PullRootFSRequest struct {
 
 func (x *PullRootFSRequest) Reset() {
 	*x = PullRootFSRequest{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[7]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -438,7 +637,7 @@ func (x *PullRootFSRequest) String() string {
 func (*PullRootFSRequest) ProtoMessage() {}
 
 func (x *PullRootFSRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[7]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -451,7 +650,7 @@ func (x *PullRootFSRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullRootFSRequest.ProtoReflect.Descriptor instead.
 func (*PullRootFSRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{7}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PullRootFSRequest) GetSpec() *RootFSSpec {
@@ -472,7 +671,7 @@ type PullRootFSResponse struct {
 
 func (x *PullRootFSResponse) Reset() {
 	*x = PullRootFSResponse{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[8]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -484,7 +683,7 @@ func (x *PullRootFSResponse) String() string {
 func (*PullRootFSResponse) ProtoMessage() {}
 
 func (x *PullRootFSResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[8]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -497,7 +696,7 @@ func (x *PullRootFSResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullRootFSResponse.ProtoReflect.Descriptor instead.
 func (*PullRootFSResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{8}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PullRootFSResponse) GetRootfsRef() string {
@@ -516,7 +715,7 @@ type RemoveRootFSRequest struct {
 
 func (x *RemoveRootFSRequest) Reset() {
 	*x = RemoveRootFSRequest{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[9]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -528,7 +727,7 @@ func (x *RemoveRootFSRequest) String() string {
 func (*RemoveRootFSRequest) ProtoMessage() {}
 
 func (x *RemoveRootFSRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[9]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,7 +740,7 @@ func (x *RemoveRootFSRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveRootFSRequest.ProtoReflect.Descriptor instead.
 func (*RemoveRootFSRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{9}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RemoveRootFSRequest) GetSpec() *RootFSSpec {
@@ -559,7 +758,7 @@ type RemoveRootFSResponse struct {
 
 func (x *RemoveRootFSResponse) Reset() {
 	*x = RemoveRootFSResponse{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[10]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -571,7 +770,7 @@ func (x *RemoveRootFSResponse) String() string {
 func (*RemoveRootFSResponse) ProtoMessage() {}
 
 func (x *RemoveRootFSResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[10]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -584,7 +783,7 @@ func (x *RemoveRootFSResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveRootFSResponse.ProtoReflect.Descriptor instead.
 func (*RemoveRootFSResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{10}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{14}
 }
 
 // SandboxMetadata identifies a sandbox for the purposes of logging and
@@ -602,7 +801,7 @@ type SandboxMetadata struct {
 
 func (x *SandboxMetadata) Reset() {
 	*x = SandboxMetadata{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[11]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -614,7 +813,7 @@ func (x *SandboxMetadata) String() string {
 func (*SandboxMetadata) ProtoMessage() {}
 
 func (x *SandboxMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[11]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -627,7 +826,7 @@ func (x *SandboxMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxMetadata.ProtoReflect.Descriptor instead.
 func (*SandboxMetadata) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{11}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SandboxMetadata) GetName() string {
@@ -659,7 +858,7 @@ type SandboxResources struct {
 
 func (x *SandboxResources) Reset() {
 	*x = SandboxResources{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[12]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -671,7 +870,7 @@ func (x *SandboxResources) String() string {
 func (*SandboxResources) ProtoMessage() {}
 
 func (x *SandboxResources) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[12]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -684,7 +883,7 @@ func (x *SandboxResources) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxResources.ProtoReflect.Descriptor instead.
 func (*SandboxResources) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{12}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SandboxResources) GetCpu() float64 {
@@ -732,7 +931,7 @@ type RootFSMount struct {
 
 func (x *RootFSMount) Reset() {
 	*x = RootFSMount{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[13]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -744,7 +943,7 @@ func (x *RootFSMount) String() string {
 func (*RootFSMount) ProtoMessage() {}
 
 func (x *RootFSMount) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[13]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -757,7 +956,7 @@ func (x *RootFSMount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootFSMount.ProtoReflect.Descriptor instead.
 func (*RootFSMount) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{13}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RootFSMount) GetSpec() *RootFSSpec {
@@ -806,7 +1005,7 @@ type BootConfig struct {
 
 func (x *BootConfig) Reset() {
 	*x = BootConfig{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[14]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -818,7 +1017,7 @@ func (x *BootConfig) String() string {
 func (*BootConfig) ProtoMessage() {}
 
 func (x *BootConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[14]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -831,7 +1030,7 @@ func (x *BootConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootConfig.ProtoReflect.Descriptor instead.
 func (*BootConfig) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{14}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *BootConfig) GetKernelImagePath() string {
@@ -875,7 +1074,7 @@ type SandboxConfig struct {
 
 func (x *SandboxConfig) Reset() {
 	*x = SandboxConfig{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[15]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -887,7 +1086,7 @@ func (x *SandboxConfig) String() string {
 func (*SandboxConfig) ProtoMessage() {}
 
 func (x *SandboxConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[15]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -900,7 +1099,7 @@ func (x *SandboxConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxConfig.ProtoReflect.Descriptor instead.
 func (*SandboxConfig) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{15}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SandboxConfig) GetMetadata() *SandboxMetadata {
@@ -954,7 +1153,7 @@ type CreateSandboxRequest struct {
 
 func (x *CreateSandboxRequest) Reset() {
 	*x = CreateSandboxRequest{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[16]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -966,7 +1165,7 @@ func (x *CreateSandboxRequest) String() string {
 func (*CreateSandboxRequest) ProtoMessage() {}
 
 func (x *CreateSandboxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[16]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -979,7 +1178,7 @@ func (x *CreateSandboxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSandboxRequest.ProtoReflect.Descriptor instead.
 func (*CreateSandboxRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{16}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CreateSandboxRequest) GetConfig() *SandboxConfig {
@@ -998,7 +1197,7 @@ type CreateSandboxResponse struct {
 
 func (x *CreateSandboxResponse) Reset() {
 	*x = CreateSandboxResponse{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[17]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1010,7 +1209,7 @@ func (x *CreateSandboxResponse) String() string {
 func (*CreateSandboxResponse) ProtoMessage() {}
 
 func (x *CreateSandboxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[17]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1023,7 +1222,7 @@ func (x *CreateSandboxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSandboxResponse.ProtoReflect.Descriptor instead.
 func (*CreateSandboxResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{17}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CreateSandboxResponse) GetSandboxId() string {
@@ -1042,7 +1241,7 @@ type StartSandboxRequest struct {
 
 func (x *StartSandboxRequest) Reset() {
 	*x = StartSandboxRequest{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[18]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1054,7 +1253,7 @@ func (x *StartSandboxRequest) String() string {
 func (*StartSandboxRequest) ProtoMessage() {}
 
 func (x *StartSandboxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[18]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1067,7 +1266,7 @@ func (x *StartSandboxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartSandboxRequest.ProtoReflect.Descriptor instead.
 func (*StartSandboxRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{18}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *StartSandboxRequest) GetSandboxId() string {
@@ -1085,7 +1284,7 @@ type StartSandboxResponse struct {
 
 func (x *StartSandboxResponse) Reset() {
 	*x = StartSandboxResponse{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[19]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1097,7 +1296,7 @@ func (x *StartSandboxResponse) String() string {
 func (*StartSandboxResponse) ProtoMessage() {}
 
 func (x *StartSandboxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[19]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1110,7 +1309,7 @@ func (x *StartSandboxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartSandboxResponse.ProtoReflect.Descriptor instead.
 func (*StartSandboxResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{19}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{23}
 }
 
 var File_pkg_api_runtime_v1_api_proto protoreflect.FileDescriptor
@@ -1118,7 +1317,23 @@ var File_pkg_api_runtime_v1_api_proto protoreflect.FileDescriptor
 const file_pkg_api_runtime_v1_api_proto_rawDesc = "" +
 	"\n" +
 	"\x1cpkg/api/runtime/v1/api.proto\x12\n" +
-	"runtime.v1\"\xad\x01\n" +
+	"runtime.v1\"5\n" +
+	"\x14AttachNetworkRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\x93\x01\n" +
+	"\x15AttachNetworkResponse\x12\x1d\n" +
+	"\n" +
+	"netns_path\x18\x01 \x01(\tR\tnetnsPath\x12\x1d\n" +
+	"\n" +
+	"tap_device\x18\x02 \x01(\tR\ttapDevice\x12\x1d\n" +
+	"\n" +
+	"ip_address\x18\x03 \x01(\tR\tipAddress\x12\x1d\n" +
+	"\n" +
+	"gateway_ip\x18\x04 \x01(\tR\tgatewayIp\"5\n" +
+	"\x14DetachNetworkRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\x17\n" +
+	"\x15DetachNetworkResponse\"\xad\x01\n" +
 	"\n" +
 	"RootFSSpec\x12\x14\n" +
 	"\x05image\x18\x01 \x01(\tR\x05image\x12I\n" +
@@ -1205,7 +1420,10 @@ const file_pkg_api_runtime_v1_api_proto_rawDesc = "" +
 	"\fRootFSStatus\x12\x1f.runtime.v1.RootFSStatusRequest\x1a .runtime.v1.RootFSStatusResponse\"\x00\x12M\n" +
 	"\n" +
 	"PullRootFS\x12\x1d.runtime.v1.PullRootFSRequest\x1a\x1e.runtime.v1.PullRootFSResponse\"\x00\x12S\n" +
-	"\fRemoveRootFS\x12\x1f.runtime.v1.RemoveRootFSRequest\x1a .runtime.v1.RemoveRootFSResponse\"\x00BAZ?github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1;v1b\x06proto3"
+	"\fRemoveRootFS\x12\x1f.runtime.v1.RemoveRootFSRequest\x1a .runtime.v1.RemoveRootFSResponse\"\x002\xc0\x01\n" +
+	"\x0eNetworkService\x12V\n" +
+	"\rAttachNetwork\x12 .runtime.v1.AttachNetworkRequest\x1a!.runtime.v1.AttachNetworkResponse\"\x00\x12V\n" +
+	"\rDetachNetwork\x12 .runtime.v1.DetachNetworkRequest\x1a!.runtime.v1.DetachNetworkResponse\"\x00BAZ?github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1;v1b\x06proto3"
 
 var (
 	file_pkg_api_runtime_v1_api_proto_rawDescOnce sync.Once
@@ -1219,66 +1437,74 @@ func file_pkg_api_runtime_v1_api_proto_rawDescGZIP() []byte {
 	return file_pkg_api_runtime_v1_api_proto_rawDescData
 }
 
-var file_pkg_api_runtime_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_pkg_api_runtime_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_pkg_api_runtime_v1_api_proto_goTypes = []any{
-	(*RootFSSpec)(nil),            // 0: runtime.v1.RootFSSpec
-	(*RootFS)(nil),                // 1: runtime.v1.RootFS
-	(*RootFSFilter)(nil),          // 2: runtime.v1.RootFSFilter
-	(*ListRootFSRequest)(nil),     // 3: runtime.v1.ListRootFSRequest
-	(*ListRootFSResponse)(nil),    // 4: runtime.v1.ListRootFSResponse
-	(*RootFSStatusRequest)(nil),   // 5: runtime.v1.RootFSStatusRequest
-	(*RootFSStatusResponse)(nil),  // 6: runtime.v1.RootFSStatusResponse
-	(*PullRootFSRequest)(nil),     // 7: runtime.v1.PullRootFSRequest
-	(*PullRootFSResponse)(nil),    // 8: runtime.v1.PullRootFSResponse
-	(*RemoveRootFSRequest)(nil),   // 9: runtime.v1.RemoveRootFSRequest
-	(*RemoveRootFSResponse)(nil),  // 10: runtime.v1.RemoveRootFSResponse
-	(*SandboxMetadata)(nil),       // 11: runtime.v1.SandboxMetadata
-	(*SandboxResources)(nil),      // 12: runtime.v1.SandboxResources
-	(*RootFSMount)(nil),           // 13: runtime.v1.RootFSMount
-	(*BootConfig)(nil),            // 14: runtime.v1.BootConfig
-	(*SandboxConfig)(nil),         // 15: runtime.v1.SandboxConfig
-	(*CreateSandboxRequest)(nil),  // 16: runtime.v1.CreateSandboxRequest
-	(*CreateSandboxResponse)(nil), // 17: runtime.v1.CreateSandboxResponse
-	(*StartSandboxRequest)(nil),   // 18: runtime.v1.StartSandboxRequest
-	(*StartSandboxResponse)(nil),  // 19: runtime.v1.StartSandboxResponse
-	nil,                           // 20: runtime.v1.RootFSSpec.AnnotationsEntry
-	nil,                           // 21: runtime.v1.RootFSStatusResponse.InfoEntry
-	nil,                           // 22: runtime.v1.SandboxConfig.LabelsEntry
-	nil,                           // 23: runtime.v1.SandboxConfig.AnnotationsEntry
+	(*AttachNetworkRequest)(nil),  // 0: runtime.v1.AttachNetworkRequest
+	(*AttachNetworkResponse)(nil), // 1: runtime.v1.AttachNetworkResponse
+	(*DetachNetworkRequest)(nil),  // 2: runtime.v1.DetachNetworkRequest
+	(*DetachNetworkResponse)(nil), // 3: runtime.v1.DetachNetworkResponse
+	(*RootFSSpec)(nil),            // 4: runtime.v1.RootFSSpec
+	(*RootFS)(nil),                // 5: runtime.v1.RootFS
+	(*RootFSFilter)(nil),          // 6: runtime.v1.RootFSFilter
+	(*ListRootFSRequest)(nil),     // 7: runtime.v1.ListRootFSRequest
+	(*ListRootFSResponse)(nil),    // 8: runtime.v1.ListRootFSResponse
+	(*RootFSStatusRequest)(nil),   // 9: runtime.v1.RootFSStatusRequest
+	(*RootFSStatusResponse)(nil),  // 10: runtime.v1.RootFSStatusResponse
+	(*PullRootFSRequest)(nil),     // 11: runtime.v1.PullRootFSRequest
+	(*PullRootFSResponse)(nil),    // 12: runtime.v1.PullRootFSResponse
+	(*RemoveRootFSRequest)(nil),   // 13: runtime.v1.RemoveRootFSRequest
+	(*RemoveRootFSResponse)(nil),  // 14: runtime.v1.RemoveRootFSResponse
+	(*SandboxMetadata)(nil),       // 15: runtime.v1.SandboxMetadata
+	(*SandboxResources)(nil),      // 16: runtime.v1.SandboxResources
+	(*RootFSMount)(nil),           // 17: runtime.v1.RootFSMount
+	(*BootConfig)(nil),            // 18: runtime.v1.BootConfig
+	(*SandboxConfig)(nil),         // 19: runtime.v1.SandboxConfig
+	(*CreateSandboxRequest)(nil),  // 20: runtime.v1.CreateSandboxRequest
+	(*CreateSandboxResponse)(nil), // 21: runtime.v1.CreateSandboxResponse
+	(*StartSandboxRequest)(nil),   // 22: runtime.v1.StartSandboxRequest
+	(*StartSandboxResponse)(nil),  // 23: runtime.v1.StartSandboxResponse
+	nil,                           // 24: runtime.v1.RootFSSpec.AnnotationsEntry
+	nil,                           // 25: runtime.v1.RootFSStatusResponse.InfoEntry
+	nil,                           // 26: runtime.v1.SandboxConfig.LabelsEntry
+	nil,                           // 27: runtime.v1.SandboxConfig.AnnotationsEntry
 }
 var file_pkg_api_runtime_v1_api_proto_depIdxs = []int32{
-	20, // 0: runtime.v1.RootFSSpec.annotations:type_name -> runtime.v1.RootFSSpec.AnnotationsEntry
-	0,  // 1: runtime.v1.RootFS.spec:type_name -> runtime.v1.RootFSSpec
-	0,  // 2: runtime.v1.RootFSFilter.spec:type_name -> runtime.v1.RootFSSpec
-	2,  // 3: runtime.v1.ListRootFSRequest.filter:type_name -> runtime.v1.RootFSFilter
-	1,  // 4: runtime.v1.ListRootFSResponse.rootfs:type_name -> runtime.v1.RootFS
-	0,  // 5: runtime.v1.RootFSStatusRequest.spec:type_name -> runtime.v1.RootFSSpec
-	1,  // 6: runtime.v1.RootFSStatusResponse.rootfs:type_name -> runtime.v1.RootFS
-	21, // 7: runtime.v1.RootFSStatusResponse.info:type_name -> runtime.v1.RootFSStatusResponse.InfoEntry
-	0,  // 8: runtime.v1.PullRootFSRequest.spec:type_name -> runtime.v1.RootFSSpec
-	0,  // 9: runtime.v1.RemoveRootFSRequest.spec:type_name -> runtime.v1.RootFSSpec
-	0,  // 10: runtime.v1.RootFSMount.spec:type_name -> runtime.v1.RootFSSpec
-	11, // 11: runtime.v1.SandboxConfig.metadata:type_name -> runtime.v1.SandboxMetadata
-	13, // 12: runtime.v1.SandboxConfig.rootfs:type_name -> runtime.v1.RootFSMount
-	14, // 13: runtime.v1.SandboxConfig.boot:type_name -> runtime.v1.BootConfig
-	12, // 14: runtime.v1.SandboxConfig.resources:type_name -> runtime.v1.SandboxResources
-	22, // 15: runtime.v1.SandboxConfig.labels:type_name -> runtime.v1.SandboxConfig.LabelsEntry
-	23, // 16: runtime.v1.SandboxConfig.annotations:type_name -> runtime.v1.SandboxConfig.AnnotationsEntry
-	15, // 17: runtime.v1.CreateSandboxRequest.config:type_name -> runtime.v1.SandboxConfig
-	16, // 18: runtime.v1.RuntimeService.CreateSandbox:input_type -> runtime.v1.CreateSandboxRequest
-	18, // 19: runtime.v1.RuntimeService.StartSandbox:input_type -> runtime.v1.StartSandboxRequest
-	3,  // 20: runtime.v1.RootFSService.ListRootFS:input_type -> runtime.v1.ListRootFSRequest
-	5,  // 21: runtime.v1.RootFSService.RootFSStatus:input_type -> runtime.v1.RootFSStatusRequest
-	7,  // 22: runtime.v1.RootFSService.PullRootFS:input_type -> runtime.v1.PullRootFSRequest
-	9,  // 23: runtime.v1.RootFSService.RemoveRootFS:input_type -> runtime.v1.RemoveRootFSRequest
-	17, // 24: runtime.v1.RuntimeService.CreateSandbox:output_type -> runtime.v1.CreateSandboxResponse
-	19, // 25: runtime.v1.RuntimeService.StartSandbox:output_type -> runtime.v1.StartSandboxResponse
-	4,  // 26: runtime.v1.RootFSService.ListRootFS:output_type -> runtime.v1.ListRootFSResponse
-	6,  // 27: runtime.v1.RootFSService.RootFSStatus:output_type -> runtime.v1.RootFSStatusResponse
-	8,  // 28: runtime.v1.RootFSService.PullRootFS:output_type -> runtime.v1.PullRootFSResponse
-	10, // 29: runtime.v1.RootFSService.RemoveRootFS:output_type -> runtime.v1.RemoveRootFSResponse
-	24, // [24:30] is the sub-list for method output_type
-	18, // [18:24] is the sub-list for method input_type
+	24, // 0: runtime.v1.RootFSSpec.annotations:type_name -> runtime.v1.RootFSSpec.AnnotationsEntry
+	4,  // 1: runtime.v1.RootFS.spec:type_name -> runtime.v1.RootFSSpec
+	4,  // 2: runtime.v1.RootFSFilter.spec:type_name -> runtime.v1.RootFSSpec
+	6,  // 3: runtime.v1.ListRootFSRequest.filter:type_name -> runtime.v1.RootFSFilter
+	5,  // 4: runtime.v1.ListRootFSResponse.rootfs:type_name -> runtime.v1.RootFS
+	4,  // 5: runtime.v1.RootFSStatusRequest.spec:type_name -> runtime.v1.RootFSSpec
+	5,  // 6: runtime.v1.RootFSStatusResponse.rootfs:type_name -> runtime.v1.RootFS
+	25, // 7: runtime.v1.RootFSStatusResponse.info:type_name -> runtime.v1.RootFSStatusResponse.InfoEntry
+	4,  // 8: runtime.v1.PullRootFSRequest.spec:type_name -> runtime.v1.RootFSSpec
+	4,  // 9: runtime.v1.RemoveRootFSRequest.spec:type_name -> runtime.v1.RootFSSpec
+	4,  // 10: runtime.v1.RootFSMount.spec:type_name -> runtime.v1.RootFSSpec
+	15, // 11: runtime.v1.SandboxConfig.metadata:type_name -> runtime.v1.SandboxMetadata
+	17, // 12: runtime.v1.SandboxConfig.rootfs:type_name -> runtime.v1.RootFSMount
+	18, // 13: runtime.v1.SandboxConfig.boot:type_name -> runtime.v1.BootConfig
+	16, // 14: runtime.v1.SandboxConfig.resources:type_name -> runtime.v1.SandboxResources
+	26, // 15: runtime.v1.SandboxConfig.labels:type_name -> runtime.v1.SandboxConfig.LabelsEntry
+	27, // 16: runtime.v1.SandboxConfig.annotations:type_name -> runtime.v1.SandboxConfig.AnnotationsEntry
+	19, // 17: runtime.v1.CreateSandboxRequest.config:type_name -> runtime.v1.SandboxConfig
+	20, // 18: runtime.v1.RuntimeService.CreateSandbox:input_type -> runtime.v1.CreateSandboxRequest
+	22, // 19: runtime.v1.RuntimeService.StartSandbox:input_type -> runtime.v1.StartSandboxRequest
+	7,  // 20: runtime.v1.RootFSService.ListRootFS:input_type -> runtime.v1.ListRootFSRequest
+	9,  // 21: runtime.v1.RootFSService.RootFSStatus:input_type -> runtime.v1.RootFSStatusRequest
+	11, // 22: runtime.v1.RootFSService.PullRootFS:input_type -> runtime.v1.PullRootFSRequest
+	13, // 23: runtime.v1.RootFSService.RemoveRootFS:input_type -> runtime.v1.RemoveRootFSRequest
+	0,  // 24: runtime.v1.NetworkService.AttachNetwork:input_type -> runtime.v1.AttachNetworkRequest
+	2,  // 25: runtime.v1.NetworkService.DetachNetwork:input_type -> runtime.v1.DetachNetworkRequest
+	21, // 26: runtime.v1.RuntimeService.CreateSandbox:output_type -> runtime.v1.CreateSandboxResponse
+	23, // 27: runtime.v1.RuntimeService.StartSandbox:output_type -> runtime.v1.StartSandboxResponse
+	8,  // 28: runtime.v1.RootFSService.ListRootFS:output_type -> runtime.v1.ListRootFSResponse
+	10, // 29: runtime.v1.RootFSService.RootFSStatus:output_type -> runtime.v1.RootFSStatusResponse
+	12, // 30: runtime.v1.RootFSService.PullRootFS:output_type -> runtime.v1.PullRootFSResponse
+	14, // 31: runtime.v1.RootFSService.RemoveRootFS:output_type -> runtime.v1.RemoveRootFSResponse
+	1,  // 32: runtime.v1.NetworkService.AttachNetwork:output_type -> runtime.v1.AttachNetworkResponse
+	3,  // 33: runtime.v1.NetworkService.DetachNetwork:output_type -> runtime.v1.DetachNetworkResponse
+	26, // [26:34] is the sub-list for method output_type
+	18, // [18:26] is the sub-list for method input_type
 	18, // [18:18] is the sub-list for extension type_name
 	18, // [18:18] is the sub-list for extension extendee
 	0,  // [0:18] is the sub-list for field type_name
@@ -1295,9 +1521,9 @@ func file_pkg_api_runtime_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_api_runtime_v1_api_proto_rawDesc), len(file_pkg_api_runtime_v1_api_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   28,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_pkg_api_runtime_v1_api_proto_goTypes,
 		DependencyIndexes: file_pkg_api_runtime_v1_api_proto_depIdxs,

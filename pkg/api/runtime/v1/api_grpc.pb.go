@@ -413,3 +413,165 @@ var RootFSService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "pkg/api/runtime/v1/api.proto",
 }
+
+const (
+	NetworkService_AttachNetwork_FullMethodName = "/runtime.v1.NetworkService/AttachNetwork"
+	NetworkService_DetachNetwork_FullMethodName = "/runtime.v1.NetworkService/DetachNetwork"
+)
+
+// NetworkServiceClient is the client API for NetworkService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// NetworkService defines the public APIs for attaching and detaching a
+// sandbox's network. It is independent of RuntimeService/RootFSService: it
+// deals only in sandbox IDs and generic network handles, with no knowledge
+// of how a sandbox is actually run.
+type NetworkServiceClient interface {
+	// AttachNetwork provisions networking for a sandbox (namespace, tap
+	// device, IP) and returns the handles needed to actually run it.
+	// Idempotent: calling it again for an already-attached sandbox returns
+	// the existing handle rather than erroring.
+	AttachNetwork(ctx context.Context, in *AttachNetworkRequest, opts ...grpc.CallOption) (*AttachNetworkResponse, error)
+	// DetachNetwork tears down a sandbox's networking and releases its IP
+	// back to the pool.
+	DetachNetwork(ctx context.Context, in *DetachNetworkRequest, opts ...grpc.CallOption) (*DetachNetworkResponse, error)
+}
+
+type networkServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewNetworkServiceClient(cc grpc.ClientConnInterface) NetworkServiceClient {
+	return &networkServiceClient{cc}
+}
+
+func (c *networkServiceClient) AttachNetwork(ctx context.Context, in *AttachNetworkRequest, opts ...grpc.CallOption) (*AttachNetworkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AttachNetworkResponse)
+	err := c.cc.Invoke(ctx, NetworkService_AttachNetwork_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *networkServiceClient) DetachNetwork(ctx context.Context, in *DetachNetworkRequest, opts ...grpc.CallOption) (*DetachNetworkResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DetachNetworkResponse)
+	err := c.cc.Invoke(ctx, NetworkService_DetachNetwork_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// NetworkServiceServer is the server API for NetworkService service.
+// All implementations must embed UnimplementedNetworkServiceServer
+// for forward compatibility.
+//
+// NetworkService defines the public APIs for attaching and detaching a
+// sandbox's network. It is independent of RuntimeService/RootFSService: it
+// deals only in sandbox IDs and generic network handles, with no knowledge
+// of how a sandbox is actually run.
+type NetworkServiceServer interface {
+	// AttachNetwork provisions networking for a sandbox (namespace, tap
+	// device, IP) and returns the handles needed to actually run it.
+	// Idempotent: calling it again for an already-attached sandbox returns
+	// the existing handle rather than erroring.
+	AttachNetwork(context.Context, *AttachNetworkRequest) (*AttachNetworkResponse, error)
+	// DetachNetwork tears down a sandbox's networking and releases its IP
+	// back to the pool.
+	DetachNetwork(context.Context, *DetachNetworkRequest) (*DetachNetworkResponse, error)
+	mustEmbedUnimplementedNetworkServiceServer()
+}
+
+// UnimplementedNetworkServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedNetworkServiceServer struct{}
+
+func (UnimplementedNetworkServiceServer) AttachNetwork(context.Context, *AttachNetworkRequest) (*AttachNetworkResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AttachNetwork not implemented")
+}
+func (UnimplementedNetworkServiceServer) DetachNetwork(context.Context, *DetachNetworkRequest) (*DetachNetworkResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DetachNetwork not implemented")
+}
+func (UnimplementedNetworkServiceServer) mustEmbedUnimplementedNetworkServiceServer() {}
+func (UnimplementedNetworkServiceServer) testEmbeddedByValue()                        {}
+
+// UnsafeNetworkServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to NetworkServiceServer will
+// result in compilation errors.
+type UnsafeNetworkServiceServer interface {
+	mustEmbedUnimplementedNetworkServiceServer()
+}
+
+func RegisterNetworkServiceServer(s grpc.ServiceRegistrar, srv NetworkServiceServer) {
+	// If the following call panics, it indicates UnimplementedNetworkServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&NetworkService_ServiceDesc, srv)
+}
+
+func _NetworkService_AttachNetwork_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AttachNetworkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NetworkServiceServer).AttachNetwork(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NetworkService_AttachNetwork_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NetworkServiceServer).AttachNetwork(ctx, req.(*AttachNetworkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NetworkService_DetachNetwork_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DetachNetworkRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NetworkServiceServer).DetachNetwork(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NetworkService_DetachNetwork_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NetworkServiceServer).DetachNetwork(ctx, req.(*DetachNetworkRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// NetworkService_ServiceDesc is the grpc.ServiceDesc for NetworkService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var NetworkService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "runtime.v1.NetworkService",
+	HandlerType: (*NetworkServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "AttachNetwork",
+			Handler:    _NetworkService_AttachNetwork_Handler,
+		},
+		{
+			MethodName: "DetachNetwork",
+			Handler:    _NetworkService_DetachNetwork_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "pkg/api/runtime/v1/api.proto",
+}
