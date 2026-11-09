@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
-	internalnetwork "github.com/tardigradeproj/sandbox-runtime/internal/network"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/idalloc"
@@ -41,11 +40,6 @@ type Runtime struct {
 	store *store.Store
 	// jailerIDs is set when jailer's uid_gid.mode is "on_demand".
 	jailerIDs *idalloc.Allocator
-	// network is set when jailer is enabled -- networking is only
-	// namespace-isolated per sandbox in that case (see runtime_linux.go).
-	// CreateSandbox calls it directly, same as r.store, rather than
-	// over a loopback gRPC connection -- see internal/network.
-	network *internalnetwork.Network
 }
 
 // NewRuntime constructs a Runtime.
@@ -65,12 +59,6 @@ func NewRuntime(cfg *cfg.Settings, store *store.Store) (*Runtime, error) {
 			}
 			r.jailerIDs = a
 		}
-
-		n, err := internalnetwork.New(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to set up network: %w", err)
-		}
-		r.network = n
 	}
 	return r, nil
 }

@@ -62,7 +62,7 @@ func (n *Network) AttachNetwork(ctx context.Context, req *v1.AttachNetworkReques
 	}
 	return &v1.AttachNetworkResponse{
 		NetnsPath: att.NetnsPath,
-		TapDevice: att.TapDevice,
+		TapDevice: netcore.TapDeviceName,
 		IpAddress: att.IPAddress,
 		GatewayIp: att.GatewayIP,
 	}, nil

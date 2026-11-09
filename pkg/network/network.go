@@ -28,11 +28,35 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/tardigradeproj/sandbox-runtime/pkg/sandboxnet"
 )
+
+const (
+	// TapDeviceName is the tap device created inside every sandbox's
+	// own netns for the guest NIC (see Attach), e.g. for Firecracker's
+	// NetworkInterface.host_dev_name. Hardcoded, not per-sandbox:
+	// every sandbox has its own isolated namespace, so this name never
+	// collides across sandboxes.
+	TapDeviceName = "tap0"
+	// IfaceID identifies the sandbox's guest NIC in Firecracker's own
+	// API (PUT /network-interfaces/{iface_id}). Hardcoded for the same
+	// reason as TapDeviceName.
+	IfaceID = "net0"
+)
+
+// NetnsPath returns the network namespace path Attach creates for
+// sandboxID (see sandboxnet.Create). By convention, not by lookup:
+// callers that only need to point jailer/Firecracker at a sandbox's
+// namespace (e.g. CreateSandbox) can compute this directly instead of
+// calling Attach themselves -- provisioning that namespace is
+// NetworkService's job, done independently.
+func NetnsPath(sandboxID string) string {
+	return filepath.Join(sandboxnet.Dir, sandboxID)
+}
 
 // Attachment is what AttachNetwork hands back: everything the caller
 // needs to actually run a sandbox, in generic terms.
@@ -40,12 +64,6 @@ type Attachment struct {
 	// NetnsPath is the network namespace to run the sandbox in, e.g.
 	// for jailer's --netns.
 	NetnsPath string
-	// TapDevice is the tap device created inside that namespace for
-	// the guest's NIC, e.g. for Firecracker's
-	// NetworkInterface.host_dev_name. Always "tap0": unique per
-	// sandbox only within its own namespace, which is all that's
-	// needed.
-	TapDevice string
 	// IPAddress is the sandbox's address, in CIDR form.
 	IPAddress string
 	// GatewayIP is the address the sandbox routes through.
@@ -154,11 +172,11 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 	}
 
 	vethHost := vethHostName(sandboxID)
-	const tap, vethNS = "tap0", "veth-ns"
+	const vethNS = "veth-ns"
 
 	steps := [][]string{
-		{"ip", "netns", "exec", sandboxID, "ip", "tuntap", "add", "dev", tap, "mode", "tap"},
-		{"ip", "netns", "exec", sandboxID, "ip", "link", "set", tap, "up"},
+		{"ip", "netns", "exec", sandboxID, "ip", "tuntap", "add", "dev", TapDeviceName, "mode", "tap"},
+		{"ip", "netns", "exec", sandboxID, "ip", "link", "set", TapDeviceName, "up"},
 		{"ip", "link", "add", vethHost, "type", "veth", "peer", "name", vethNS},
 		{"ip", "link", "set", vethNS, "netns", sandboxID},
 		{"ip", "link", "set", vethHost, "master", n.bridgeName},
@@ -176,7 +194,6 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 
 	return Attachment{
 		NetnsPath: netnsPath,
-		TapDevice: tap,
 		IPAddress: fmt.Sprintf("%s/%d", ip, n.prefixLen),
 		GatewayIP: n.gatewayIP.String(),
 	}, nil

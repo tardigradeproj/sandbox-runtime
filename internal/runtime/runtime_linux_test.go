@@ -412,7 +412,6 @@ func TestCreateSandboxJailerEnabledAttemptsJailerSpawn(t *testing.T) {
 				},
 			},
 		},
-		Network: cfg.Network{Cidr: "10.201.5.0/24", BridgeName: "sri-test0"},
 	}, st)
 	require.NoError(t, err)
 	seedRootfsEntry(t, st, "myimage:latest")
@@ -484,7 +483,6 @@ func TestResolveJailerUIDGIDOnDemand(t *testing.T) {
 			ChrootBaseDir: t.TempDir(),
 			UIDGID:        cfg.UIDGID{Mode: "on_demand", RangeStart: &start, RangeEnd: &end},
 		}}},
-		Network: cfg.Network{Cidr: "10.201.6.0/24", BridgeName: "sri-test1"},
 	}, st)
 	require.NoError(t, err)
 
@@ -532,7 +530,6 @@ func TestNewRuntimeCreatesJailerChrootBaseDir(t *testing.T) {
 			ChrootBaseDir: chrootBaseDir,
 			UIDGID:        cfg.UIDGID{Mode: "precreated", StaticUID: &staticUID, StaticGID: &staticGID},
 		}}},
-		Network: cfg.Network{Cidr: "10.201.7.0/24", BridgeName: "sri-test2"},
 	}, st)
 	require.NoError(t, err)
 

@@ -66,7 +66,6 @@ func TestAttachDetach(t *testing.T) {
 
 	a, err := n.Attach(ctx, sandboxID)
 	require.NoError(t, err)
-	assert.Equal(t, "tap0", a.TapDevice)
 	assert.Equal(t, "10.250.2.1", a.GatewayIP)
 	assert.Contains(t, a.NetnsPath, sandboxID)
 

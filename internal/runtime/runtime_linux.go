@@ -29,20 +29,13 @@ import (
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/cleanup"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/network"
 	obs "github.com/tardigradeproj/sandbox-runtime/pkg/observability"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const (
-	firecrackerSocketName = "firecracker.sock"
-	// networkIfaceID is the iface_id CreateSandbox attaches the
-	// sandbox's tap device under, via a direct PUT
-	// /network-interfaces/{iface_id} call (see attachNetworkInterface).
-	// Every sandbox runs in its own netns, so reusing the same id
-	// across sandboxes is not a collision.
-	networkIfaceID = "net0"
-)
+const firecrackerSocketName = "firecracker.sock"
 
 // jailerSocketPath mirrors the SDK's own jail() path computation, so
 // StartSandbox can find a jailed sandbox's socket independently.
@@ -158,7 +151,6 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	}
 
 	var machine *firecracker.Machine
-	var attachment *v1.AttachNetworkResponse
 	if fc.Jailer.Enabled {
 		uid, gid, err := r.resolveJailerUIDGID(fc.Jailer, sandboxID)
 		if err != nil {
@@ -187,17 +179,17 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 			}
 		})
 
-		attachment, err = r.network.AttachNetwork(ctx, &v1.AttachNetworkRequest{SandboxId: sandboxID})
-		if err != nil {
-			log.WithError(err).Error("create sandbox: failed to attach network")
-			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
-		}
-		cu.Add(func() {
-			if _, err := r.network.DetachNetwork(context.Background(), &v1.DetachNetworkRequest{SandboxId: sandboxID}); err != nil {
-				log.WithError(err).Warn("create sandbox: cleanup: failed to detach network")
-			}
-		})
-		machineCfg.NetNS = attachment.GetNetnsPath()
+		// Namespace + tap device are provisioned independently, by
+		// NetworkService (see pkg/network), not by CreateSandbox --
+		// RuntimeService and NetworkService don't call each other.
+		// Both the namespace path and the tap device name are fixed
+		// conventions, not values CreateSandbox needs to look up.
+		machineCfg.NetNS = network.NetnsPath(sandboxID)
+		machineCfg.NetworkInterfaces = firecracker.NetworkInterfaces{{
+			StaticConfiguration: &firecracker.StaticNetworkConfiguration{
+				HostDevName: network.TapDeviceName,
+			},
+		}}
 
 		// LogFifo (not LogPath) gets hard-linked into the chroot by the SDK.
 		logPath = filepath.Join(sandboxDir, "firecracker.fifo")
@@ -248,13 +240,6 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 
-	if attachment != nil {
-		if err := attachNetworkInterface(ctx, socketPath, attachment.GetTapDevice()); err != nil {
-			log.WithError(err).Error("create sandbox: failed to attach network interface")
-			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
-		}
-	}
-
 	cu.Release()
 	log.WithFields(logrus.Fields{
 		obs.RootfsPath:  rootfsPath,
@@ -263,28 +248,6 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		obs.LogPath:     logPath,
 	}).Info("sandbox created")
 	return &v1.CreateSandboxResponse{SandboxId: sandboxID}, nil
-}
-
-// attachNetworkInterface gives the already-spawned Firecracker process
-// its guest NIC, backed by hostDevName (a tap device inside the VMM's
-// own netns -- see internal/network). Equivalent to:
-//
-//	curl --unix-socket <socketPath> -i -X PUT \
-//	  'http://localhost/network-interfaces/net0' \
-//	  -d '{"iface_id":"net0","host_dev_name":"<hostDevName>"}'
-//
-// Done as an explicit call after the VMM is up, rather than via
-// firecracker.Config.NetworkInterfaces (which the SDK would otherwise
-// configure as part of NewMachine/Handlers.Run using its own
-// slice-index iface_id), so network attachment stays entirely owned
-// by this one call site.
-func attachNetworkInterface(ctx context.Context, socketPath, hostDevName string) error {
-	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
-	_, err := client.PutGuestNetworkInterfaceByID(ctx, networkIfaceID, &models.NetworkInterface{
-		IfaceID:     firecracker.String(networkIfaceID),
-		HostDevName: firecracker.String(hostDevName),
-	})
-	return err
 }
 
 // resolveJailerUIDGID returns the uid/gid to drop jailer's privileges
