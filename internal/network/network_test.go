@@ -45,8 +45,16 @@ func newTestNetwork(t *testing.T) *Network {
 
 	bridge := "svctestbr0"
 	n, err := New(&cfg.Settings{
-		State:   t.TempDir(),
-		Network: cfg.Network{Cidr: "10.250.9.0/28", BridgeName: bridge},
+		State: t.TempDir(),
+		Network: cfg.Network{
+			Cidr:       "10.250.9.0/28",
+			BridgeName: bridge,
+			GuestNetwork: cfg.GuestNetwork{
+				TapIP:     "169.254.100.1",
+				GuestIP:   "169.254.100.2",
+				PrefixLen: 30,
+			},
+		},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
@@ -63,6 +71,21 @@ func TestDetachNetworkRequiresSandboxID(t *testing.T) {
 	n := newTestNetwork(t)
 	_, err := n.DetachNetwork(context.Background(), &v1.DetachNetworkRequest{})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestAttachNetworkTwiceReturnsAlreadyExists(t *testing.T) {
+	n := newTestNetwork(t)
+	const sandboxID = "net-svc-test-dup"
+	t.Cleanup(func() {
+		_, _ = n.DetachNetwork(context.Background(), &v1.DetachNetworkRequest{SandboxId: sandboxID})
+	})
+
+	_, err := n.AttachNetwork(context.Background(), &v1.AttachNetworkRequest{SandboxId: sandboxID})
+	require.NoError(t, err)
+
+	_, err = n.AttachNetwork(context.Background(), &v1.AttachNetworkRequest{SandboxId: sandboxID})
+	assert.Equal(t, codes.AlreadyExists, status.Code(err))
+	assert.Contains(t, err.Error(), sandboxID)
 }
 
 func TestAttachDetachNetworkRoundTrip(t *testing.T) {

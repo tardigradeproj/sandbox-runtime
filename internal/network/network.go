@@ -21,6 +21,7 @@ package network
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -40,7 +41,8 @@ type Network struct {
 // New sets up this node's bridge and NAT rule (see netcore.New) and
 // returns a Network ready to serve AttachNetwork/DetachNetwork.
 func New(cfg *cfg.Settings) (*Network, error) {
-	core, err := netcore.New(context.Background(), cfg.Network.Cidr, cfg.Network.BridgeName, filepath.Join(cfg.State, "network"))
+	guest := netcore.GuestNetwork(cfg.Network.GuestNetwork)
+	core, err := netcore.New(context.Background(), cfg.Network.Cidr, cfg.Network.BridgeName, filepath.Join(cfg.State, "network"), guest)
 	if err != nil {
 		return nil, fmt.Errorf("network: %w", err)
 	}
@@ -58,6 +60,9 @@ func (n *Network) AttachNetwork(ctx context.Context, req *v1.AttachNetworkReques
 
 	att, err := n.core.Attach(ctx, sandboxID)
 	if err != nil {
+		if errors.Is(err, netcore.ErrSandboxExists) {
+			return nil, status.Errorf(codes.AlreadyExists, "sandbox %q already exists", sandboxID)
+		}
 		return nil, status.Errorf(codes.Internal, "attach network: %v", err)
 	}
 	return &v1.AttachNetworkResponse{
