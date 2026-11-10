@@ -17,6 +17,8 @@
 package network
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 
@@ -26,6 +28,11 @@ import (
 // netnsDir must match vishvananda/netns's own bind-mount path, not
 // firecracker-go-sdk's unrelated defaultNetNSDir.
 const netnsDir = "/run/netns"
+
+// ErrSandboxExists means sandboxID is already attached (its namespace
+// already exists) -- most likely a repeated Attach for the same
+// sandbox, not an unexpected failure.
+var ErrSandboxExists = errors.New("sandbox already exists")
 
 func createNetns(name string) (string, error) {
 	errCh := make(chan error, 1)
@@ -40,6 +47,9 @@ func createNetns(name string) (string, error) {
 		errCh <- nil
 	}()
 	if err := <-errCh; err != nil {
+		if os.IsExist(err) {
+			return "", ErrSandboxExists
+		}
 		return "", err
 	}
 	return filepath.Join(netnsDir, name), nil

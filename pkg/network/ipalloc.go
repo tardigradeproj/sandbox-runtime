@@ -28,8 +28,8 @@ import (
 
 // ipAllocator hands out addresses from a CIDR, minus its network,
 // broadcast, and gateway addresses, backed by marker files on disk --
-// one per allocated address, filename the address's host offset,
-// content the owning sandbox ID. See net-design.md.
+// one per allocated address, filename the address itself (e.g.
+// "10.200.5.14"), content the owning sandbox ID. See net-design.md.
 type ipAllocator struct {
 	dir            string // one marker file per allocated offset
 	lastOffsetFile string // round-robin resume point
@@ -129,7 +129,8 @@ func (a *ipAllocator) Release(sandboxID string) error {
 }
 
 func (a *ipAllocator) markerPath(offset uint32) string {
-	return filepath.Join(a.dir, strconv.FormatUint(uint64(offset), 10))
+	ip := uint32ToIP(ipToUint32(a.base) + offset)
+	return filepath.Join(a.dir, ip.String())
 }
 
 func ipToUint32(ip net.IP) uint32 {

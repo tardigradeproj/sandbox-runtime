@@ -18,6 +18,8 @@ package network
 
 import (
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -75,6 +77,17 @@ func TestReleaseAllowsReuse(t *testing.T) {
 	ipN, err := a.Allocate("sandbox-2")
 	require.NoError(t, err)
 	assert.Equal(t, ip1, ipN, "expected the released address to be reclaimed on wraparound")
+}
+
+func TestMarkerFileIsNamedByAddressNotOffset(t *testing.T) {
+	a := newTestAllocator(t, "10.200.5.0/29")
+
+	ip, err := a.Allocate("sandbox-1")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(filepath.Join(a.dir, ip.String()))
+	require.NoError(t, err, "expected the marker file to be named by the address itself (e.g. %q), not a bare offset", ip.String())
+	assert.Equal(t, "sandbox-1", string(data))
 }
 
 func TestReleaseUnknownSandboxIsNotAnError(t *testing.T) {

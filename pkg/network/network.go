@@ -42,6 +42,26 @@ const (
 	IfaceID = "net0"
 )
 
+// GuestNetwork is the fixed point-to-point pair every sandbox's tap
+// device and guest use, same for every sandbox, since each one
+// already has its own namespace. Configured via cfg.Network.GuestNetwork;
+// this type has no default of its own -- cfg's struct tags carry it.
+type GuestNetwork struct {
+	TapIP     string
+	GuestIP   string
+	PrefixLen int
+}
+
+// GuestIPKernelParam is the Linux kernel "ip=" boot parameter that
+// configures g via the kernel's own built-in IP autoconfiguration
+// (CONFIG_IP_PNP), before any userspace init ever runs -- the same
+// mechanism Firecracker's own network-setup.md documents as an
+// alternative to a guest-side script.
+func GuestIPKernelParam(g GuestNetwork) string {
+	mask := net.IP(net.CIDRMask(g.PrefixLen, 32)).String()
+	return fmt.Sprintf("ip=%s::%s:%s::eth0:off", g.GuestIP, g.TapIP, mask)
+}
+
 // NetnsPath returns the namespace path Attach creates for sandboxID,
 // by convention, so a caller (CreateSandbox) can point jailer at it
 // without calling Attach itself.
@@ -51,8 +71,7 @@ func NetnsPath(sandboxID string) string {
 
 // Attachment is what Attach hands back.
 type Attachment struct {
-	// NetnsPath is the namespace to run the sandbox in, e.g. for
-	// jailer's --netns.
+	// NetnsPath is the namespace to run the sandbox in
 	NetnsPath string
 	IPAddress string
 	GatewayIP string
@@ -66,12 +85,13 @@ type Network struct {
 	prefixLen  int
 	bridgeName string
 	ips        *ipAllocator
+	guest      GuestNetwork
 }
 
 // New sets up this node's bridge and NAT rule (idempotent -- safe on
 // every daemon start) and returns a Network ready to Attach/Detach
 // sandboxes. stateDir is this node's own state dir for IP bookkeeping.
-func New(ctx context.Context, cidr, bridgeName, stateDir string) (*Network, error) {
+func New(ctx context.Context, cidr, bridgeName, stateDir string, guest GuestNetwork) (*Network, error) {
 	_, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return nil, fmt.Errorf("network: cidr %q: %w", cidr, err)
@@ -90,6 +110,7 @@ func New(ctx context.Context, cidr, bridgeName, stateDir string) (*Network, erro
 		prefixLen:  ones,
 		bridgeName: bridgeName,
 		ips:        ips,
+		guest:      guest,
 	}
 
 	if err := n.ensureBridge(ctx); err != nil {
@@ -159,21 +180,27 @@ func (n *Network) ensureNAT(ctx context.Context) error {
 }
 
 // Attach provisions networking for sandboxID: a namespace, a tap
-// device inside it for the guest NIC, and a veth pair out to this
-// node's bridge for egress.
+// device inside it for the guest NIC (fixed address, see n.guest),
+// and a veth pair out to this node's bridge for egress, with the
+// guest's traffic NATed from n.guest.GuestIP to the sandbox's real
+// allocated address as it crosses from tap0 to veth-ns.
 func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, error) {
-	ip, err := n.ips.Allocate(sandboxID)
-	if err != nil {
-		return Attachment{}, fmt.Errorf("network: allocate ip: %w", err)
-	}
-
+	// Created first, before allocating an IP: if sandboxID is already
+	// attached, this fails fast (ErrSandboxExists) without leaking a
+	// second address on an id that already holds one.
 	// ip netns add <sandboxID>
 	netnsPath, err := createNetns(sandboxID)
 	if err != nil {
 		return Attachment{}, fmt.Errorf("network: create namespace: %w", err)
 	}
 
+	ip, err := n.ips.Allocate(sandboxID)
+	if err != nil {
+		return Attachment{}, fmt.Errorf("network: allocate ip: %w", err)
+	}
+
 	// ip netns exec <sandboxID> ip tuntap add dev tap0 mode tap
+	// ip netns exec <sandboxID> ip addr add 169.254.100.1/30 dev tap0
 	// ip netns exec <sandboxID> ip link set tap0 up
 	//
 	// Tap creation is a raw ioctl, not a netlink message, so it needs
@@ -185,6 +212,10 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 		}
 		if err := netlink.LinkAdd(tap); err != nil {
 			return fmt.Errorf("add tap device: %w", err)
+		}
+		tapAddr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(n.guest.TapIP), Mask: net.CIDRMask(n.guest.PrefixLen, 32)}}
+		if err := netlink.AddrAdd(tap, tapAddr); err != nil {
+			return fmt.Errorf("assign tap address: %w", err)
 		}
 		return netlink.LinkSetUp(tap)
 	})
@@ -267,11 +298,63 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 		return Attachment{}, fmt.Errorf("network: add default route: %w", err)
 	}
 
+	// Second NAT boundary, nested inside the one ensureNAT already set
+	// up: the guest's fixed GuestIP is masqueraded to veth-ns's real,
+	// per-sandbox address as it leaves this namespace, which the outer
+	// bridge+NAT then carries the rest of the way out. Scoped to this
+	// namespace, so it's torn down for free when Detach deletes it.
+	err = withNetns(sandboxID, func() error {
+		// ip netns exec <sandboxID> sh -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'
+		if err := os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0o644); err != nil {
+			return fmt.Errorf("enable ip_forward: %w", err)
+		}
+		// ip netns exec <sandboxID> iptables -t nat -A POSTROUTING -s 169.254.100.2 -o veth-ns -j MASQUERADE
+		if err := run(ctx, "iptables", "-t", "nat", "-A", "POSTROUTING", "-s", n.guest.GuestIP, "-o", vethNS, "-j", "MASQUERADE"); err != nil {
+			return fmt.Errorf("add guest masquerade rule: %w", err)
+		}
+		// ip netns exec <sandboxID> iptables -A FORWARD -i tap0 -o veth-ns -j ACCEPT
+		if err := run(ctx, "iptables", "-A", "FORWARD", "-i", TapDeviceName, "-o", vethNS, "-j", "ACCEPT"); err != nil {
+			return fmt.Errorf("add forward accept rule: %w", err)
+		}
+		// ip netns exec <sandboxID> iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+		return run(ctx, "iptables", "-A", "FORWARD", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT")
+	})
+	if err != nil {
+		return Attachment{}, fmt.Errorf("network: %w", err)
+	}
+
 	return Attachment{
 		NetnsPath: netnsPath,
 		IPAddress: fmt.Sprintf("%s/%d", ip, n.prefixLen),
 		GatewayIP: n.gatewayIP.String(),
 	}, nil
+}
+
+// SetTapOwner chowns sandboxID's tap device to uid/gid (via
+// TUNSETOWNER/TUNSETGROUP), so a process running as that uid can open
+// it without CAP_NET_ADMIN. The device is created by Attach; this
+// runs separately because the caller (jailer's uid, in "on_demand"
+// mode) often isn't known until after Attach already ran.
+func SetTapOwner(sandboxID string, uid, gid int) error {
+	return withNetns(sandboxID, func() error {
+		h, err := netlink.NewHandle()
+		if err != nil {
+			return fmt.Errorf("open netlink handle: %w", err)
+		}
+		defer h.Delete()
+
+		tap := &netlink.Tuntap{
+			LinkAttrs: netlink.LinkAttrs{Name: TapDeviceName},
+			Mode:      netlink.TUNTAP_MODE_TAP,
+			// Attach's default Flags (TUNTAP_DEFAULTS) includes
+			// IFF_TUN_EXCL, which fails with EBUSY if the device
+			// already exists -- which it does, that's the point.
+			Flags: netlink.TUNTAP_ONE_QUEUE,
+			Owner: uint32(uid),
+			Group: uint32(gid),
+		}
+		return h.LinkModify(tap)
+	})
 }
 
 // Detach reverses Attach and releases sandboxID's IP. Safe to call

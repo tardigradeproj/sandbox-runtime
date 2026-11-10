@@ -18,7 +18,9 @@ package network
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -35,12 +37,20 @@ func requireSupport(t *testing.T) {
 	_ = exec.Command("ip", "link", "delete", "net-test-probe").Run()
 }
 
+// testGuest is the GuestNetwork fixture used throughout -- same
+// values cfg.Network.GuestNetwork defaults to.
+var testGuest = GuestNetwork{TapIP: "169.254.100.1", GuestIP: "169.254.100.2", PrefixLen: 30}
+
+func TestGuestIPKernelParam(t *testing.T) {
+	assert.Equal(t, "ip=169.254.100.2::169.254.100.1:255.255.255.252::eth0:off", GuestIPKernelParam(testGuest))
+}
+
 func TestOpenCreatesBridgeAndNAT(t *testing.T) {
 	requireSupport(t)
 	ctx := context.Background()
 
 	bridge := "testbr0"
-	n, err := New(ctx, "10.250.1.0/28", bridge, t.TempDir())
+	n, err := New(ctx, "10.250.1.0/28", bridge, t.TempDir(), testGuest)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
 
@@ -48,7 +58,7 @@ func TestOpenCreatesBridgeAndNAT(t *testing.T) {
 	assert.Equal(t, "10.250.1.1", n.gatewayIP.String())
 
 	// Calling Open again (same bridge, same cidr) must be idempotent.
-	_, err = New(ctx, "10.250.1.0/28", bridge, t.TempDir())
+	_, err = New(ctx, "10.250.1.0/28", bridge, t.TempDir(), testGuest)
 	require.NoError(t, err, "re-opening an already-set-up bridge must not error")
 }
 
@@ -57,7 +67,7 @@ func TestAttachDetach(t *testing.T) {
 	ctx := context.Background()
 
 	bridge := "testbr1"
-	n, err := New(ctx, "10.250.2.0/28", bridge, t.TempDir())
+	n, err := New(ctx, "10.250.2.0/28", bridge, t.TempDir(), testGuest)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
 
@@ -70,10 +80,26 @@ func TestAttachDetach(t *testing.T) {
 	assert.Contains(t, a.NetnsPath, sandboxID)
 
 	// The tap device must actually exist inside the sandbox's own
-	// namespace.
+	// namespace, with the fixed gateway address the guest expects.
+	tapOut, err := exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "ip", "addr", "show", "tap0").CombinedOutput()
+	require.NoError(t, err, "expected tap0 to exist inside the sandbox's namespace")
+	assert.Contains(t, string(tapOut), testGuest.TapIP+"/")
+
+	// The guest's fixed address must actually be reachable at the IP
+	// layer within the namespace (tap0 answers for its own address
+	// even with nothing attached to the tap fd yet).
 	assert.NoError(t,
-		exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "ip", "link", "show", "tap0").Run(),
-		"expected tap0 to exist inside the sandbox's namespace")
+		exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "ping", "-c1", "-W1", testGuest.TapIP).Run(),
+		"expected the tap device's own address to answer ping")
+
+	// The namespace must forward and NAT the guest's fixed address,
+	// not just the root namespace's own cidr-wide rule (ensureNAT).
+	assert.NoError(t,
+		exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "sh", "-c", "test \"$(cat /proc/sys/net/ipv4/ip_forward)\" = 1").Run(),
+		"expected ip_forward enabled inside the sandbox's own namespace")
+	natOut, err := exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "iptables", "-t", "nat", "-S", "POSTROUTING").CombinedOutput()
+	require.NoError(t, err)
+	assert.Contains(t, string(natOut), testGuest.GuestIP)
 
 	// The host-side veth end must be enslaved to the bridge.
 	out, err := exec.CommandContext(ctx, "ip", "-d", "link", "show", vethHostName(sandboxID)).CombinedOutput()
@@ -88,12 +114,63 @@ func TestAttachDetach(t *testing.T) {
 		"expected the namespace to be gone after Detach")
 }
 
+func TestAttachTwiceReturnsErrSandboxExistsWithoutLeakingAnIP(t *testing.T) {
+	requireSupport(t)
+	ctx := context.Background()
+
+	bridge := "testbr4"
+	n, err := New(ctx, "10.250.5.0/28", bridge, t.TempDir(), testGuest)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
+
+	const sandboxID = "net-test-dup"
+	t.Cleanup(func() { _ = n.Detach(ctx, sandboxID) })
+
+	_, err = n.Attach(ctx, sandboxID)
+	require.NoError(t, err)
+
+	_, err = n.Attach(ctx, sandboxID)
+	require.ErrorIs(t, err, ErrSandboxExists)
+
+	// The failed second Attach must not have claimed a second address
+	// for the same sandboxID on top of the one the first call holds.
+	entries, err := os.ReadDir(n.ips.dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "expected exactly one allocated address for %s, not a leaked second one", sandboxID)
+}
+
+func TestSetTapOwner(t *testing.T) {
+	requireSupport(t)
+	ctx := context.Background()
+
+	bridge := "testbr3"
+	n, err := New(ctx, "10.250.4.0/28", bridge, t.TempDir(), testGuest)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
+
+	const sandboxID = "net-test-owner"
+	t.Cleanup(func() { _ = n.Detach(ctx, sandboxID) })
+
+	_, err = n.Attach(ctx, sandboxID)
+	require.NoError(t, err)
+
+	require.NoError(t, SetTapOwner(sandboxID, 1234, 5678))
+
+	owner, err := exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "cat", "/sys/class/net/tap0/owner").CombinedOutput()
+	require.NoError(t, err)
+	assert.Equal(t, "1234", strings.TrimSpace(string(owner)))
+
+	group, err := exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "cat", "/sys/class/net/tap0/group").CombinedOutput()
+	require.NoError(t, err)
+	assert.Equal(t, "5678", strings.TrimSpace(string(group)))
+}
+
 func TestAttachAllocatesDistinctIPsAcrossSandboxes(t *testing.T) {
 	requireSupport(t)
 	ctx := context.Background()
 
 	bridge := "testbr2"
-	n, err := New(ctx, "10.250.3.0/28", bridge, t.TempDir())
+	n, err := New(ctx, "10.250.3.0/28", bridge, t.TempDir(), testGuest)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
 
