@@ -22,6 +22,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -165,6 +166,14 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 		}
 
+		// The tap device (created earlier by AttachNetwork) is owned
+		// by root; without CAP_NET_ADMIN, the jailed uid can only
+		// open it if it's also the device's recorded owner.
+		if err := network.SetTapOwner(sandboxID, uid, gid); err != nil {
+			log.WithError(err).Error("create sandbox: failed to chown tap device for jailer")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
+
 		if fc.Jailer.UIDGID.Mode == "on_demand" {
 			cu.Add(func() {
 				if err := r.jailerIDs.Release(uid); err != nil {
@@ -190,6 +199,9 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 				HostDevName: network.TapDeviceName,
 			},
 		}}
+
+		guest := network.GuestNetwork(r.cfg.Network.GuestNetwork)
+		machineCfg.KernelArgs = strings.TrimSpace(machineCfg.KernelArgs + " " + network.GuestIPKernelParam(guest))
 
 		// LogFifo (not LogPath) gets hard-linked into the chroot by the SDK.
 		logPath = filepath.Join(sandboxDir, "firecracker.fifo")

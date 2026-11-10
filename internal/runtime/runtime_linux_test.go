@@ -37,6 +37,7 @@ import (
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/network"
 )
 
 // fakeFirecrackerEnv marks a process as the fake firecracker binary
@@ -416,19 +417,31 @@ func TestCreateSandboxJailerEnabledAttemptsJailerSpawn(t *testing.T) {
 	require.NoError(t, err)
 	seedRootfsEntry(t, st, "myimage:latest")
 
+	// CreateSandbox assumes AttachNetwork already ran (see
+	// pkg/network); it never provisions the namespace/tap itself.
+	const sandboxID = "sandbox-1"
+	guest := network.GuestNetwork{TapIP: "169.254.100.1", GuestIP: "169.254.100.2", PrefixLen: 30}
+	nw, err := network.New(context.Background(), "10.201.8.0/28", "rt-test-br0", t.TempDir(), guest)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", "rt-test-br0").Run() })
+	_, err = nw.Attach(context.Background(), sandboxID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = nw.Detach(context.Background(), sandboxID) })
+
 	_, err = r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 		Config: &v1.SandboxConfig{
-			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Metadata:  &v1.SandboxMetadata{Uid: sandboxID},
 			Resources: &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
 			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
 		},
 	})
 	require.Error(t, err)
 	assert.Equal(t, codes.Internal, status.Code(err))
-	// Confirms the failure is from the spawn attempt, i.e. chown ran first and succeeded.
+	// Confirms the failure is from the spawn attempt, i.e. chown and
+	// tap-ownership both ran and succeeded first.
 	assert.Contains(t, err.Error(), "definitely-not-a-real-jailer-binary")
 
-	_, err = os.Stat(filepath.Join(stateDir, "sandbox-1"))
+	_, err = os.Stat(filepath.Join(stateDir, sandboxID))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be cleaned up after a jailer spawn failure")
 }
 
