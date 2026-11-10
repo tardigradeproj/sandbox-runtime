@@ -171,7 +171,7 @@ func seedRootfsEntry(t *testing.T, st *store.Store, image string) {
 
 func newTestRuntime(t *testing.T, state string) (*Runtime, *store.Store) {
 	t.Helper()
-	st, err := store.Open(t.TempDir())
+	st, err := store.New(t.TempDir())
 	require.NoError(t, err)
 	r, err := NewRuntime(&cfg.Settings{State: state}, st)
 	require.NoError(t, err)
@@ -220,7 +220,7 @@ func newTestRuntimeWithFakeFirecracker(t *testing.T, state string, failPuts bool
 	kernelImagePath := filepath.Join(t.TempDir(), "vmlinux")
 	require.NoError(t, os.WriteFile(kernelImagePath, []byte("fake kernel"), 0o644))
 
-	st, err := store.Open(t.TempDir())
+	st, err := store.New(t.TempDir())
 	require.NoError(t, err)
 	r, err := NewRuntime(&cfg.Settings{
 		State: state,
@@ -394,7 +394,7 @@ func TestCreateSandboxJailerEnabledAttemptsJailerSpawn(t *testing.T) {
 	require.NoError(t, os.WriteFile(kernelImagePath, []byte("fake kernel"), 0o644))
 
 	staticUID, staticGID := 1000, 1000
-	st, err := store.Open(t.TempDir())
+	st, err := store.New(t.TempDir())
 	require.NoError(t, err)
 	r, err := NewRuntime(&cfg.Settings{
 		State: stateDir,
@@ -474,7 +474,7 @@ func TestResolveJailerUIDGIDPrecreated(t *testing.T) {
 
 func TestResolveJailerUIDGIDOnDemand(t *testing.T) {
 	start, end := 100000, 100001
-	st, err := store.Open(t.TempDir())
+	st, err := store.New(t.TempDir())
 	require.NoError(t, err)
 	r, err := NewRuntime(&cfg.Settings{
 		State: t.TempDir(),
@@ -515,7 +515,7 @@ func TestResolveJailerUIDGIDUnknownMode(t *testing.T) {
 
 // jailer requires --chroot-base-dir to already exist.
 func TestNewRuntimeCreatesJailerChrootBaseDir(t *testing.T) {
-	st, err := store.Open(t.TempDir())
+	st, err := store.New(t.TempDir())
 	require.NoError(t, err)
 
 	staticUID, staticGID := 1000, 1000

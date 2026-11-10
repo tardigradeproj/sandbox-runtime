@@ -54,9 +54,9 @@ type Store struct {
 	mu   sync.Mutex
 }
 
-// Open opens (creating if necessary) a Store rooted at root, and sweeps
+// New opens (creating if necessary) a Store rooted at root, and sweeps
 // any scratch directories left behind by a crashed or killed pull.
-func Open(root string) (*Store, error) {
+func New(root string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Join(root, "images"), 0o755); err != nil {
 		return nil, fmt.Errorf("store: create images dir: %w", err)
 	}
