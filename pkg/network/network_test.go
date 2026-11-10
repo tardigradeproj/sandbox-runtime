@@ -40,7 +40,7 @@ func TestOpenCreatesBridgeAndNAT(t *testing.T) {
 	ctx := context.Background()
 
 	bridge := "testbr0"
-	n, err := Open(ctx, "10.250.1.0/28", bridge, t.TempDir())
+	n, err := New(ctx, "10.250.1.0/28", bridge, t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
 
@@ -48,7 +48,7 @@ func TestOpenCreatesBridgeAndNAT(t *testing.T) {
 	assert.Equal(t, "10.250.1.1", n.gatewayIP.String())
 
 	// Calling Open again (same bridge, same cidr) must be idempotent.
-	_, err = Open(ctx, "10.250.1.0/28", bridge, t.TempDir())
+	_, err = New(ctx, "10.250.1.0/28", bridge, t.TempDir())
 	require.NoError(t, err, "re-opening an already-set-up bridge must not error")
 }
 
@@ -57,7 +57,7 @@ func TestAttachDetach(t *testing.T) {
 	ctx := context.Background()
 
 	bridge := "testbr1"
-	n, err := Open(ctx, "10.250.2.0/28", bridge, t.TempDir())
+	n, err := New(ctx, "10.250.2.0/28", bridge, t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
 
@@ -93,7 +93,7 @@ func TestAttachAllocatesDistinctIPsAcrossSandboxes(t *testing.T) {
 	ctx := context.Background()
 
 	bridge := "testbr2"
-	n, err := Open(ctx, "10.250.3.0/28", bridge, t.TempDir())
+	n, err := New(ctx, "10.250.3.0/28", bridge, t.TempDir())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = exec.Command("ip", "link", "delete", bridge).Run() })
 

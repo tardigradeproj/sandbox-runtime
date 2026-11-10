@@ -37,10 +37,10 @@ type Network struct {
 	core *netcore.Network
 }
 
-// New sets up this node's bridge and NAT rule (see netcore.Open) and
+// New sets up this node's bridge and NAT rule (see netcore.New) and
 // returns a Network ready to serve AttachNetwork/DetachNetwork.
 func New(cfg *cfg.Settings) (*Network, error) {
-	core, err := netcore.Open(context.Background(), cfg.Network.Cidr, cfg.Network.BridgeName, filepath.Join(cfg.State, "network"))
+	core, err := netcore.New(context.Background(), cfg.Network.Cidr, cfg.Network.BridgeName, filepath.Join(cfg.State, "network"))
 	if err != nil {
 		return nil, fmt.Errorf("network: %w", err)
 	}

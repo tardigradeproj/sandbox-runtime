@@ -23,9 +23,8 @@ import (
 	"github.com/vishvananda/netns"
 )
 
-// netnsDir must match vishvananda/netns's own (unexported) bind-mount
-// path, not firecracker-go-sdk's defaultNetNSDir -- they only
-// coincide via the conventional /var/run -> /run symlink.
+// netnsDir must match vishvananda/netns's own bind-mount path, not
+// firecracker-go-sdk's unrelated defaultNetNSDir.
 const netnsDir = "/run/netns"
 
 func createNetns(name string) (string, error) {
@@ -48,4 +47,38 @@ func createNetns(name string) (string, error) {
 
 func deleteNetns(name string) error {
 	return netns.DeleteNamed(name)
+}
+
+// withNetns runs fn with this goroutine's OS thread switched into
+// namespace name. Needed for syscalls that aren't real netlink
+// messages (e.g. tap creation: a TUNSETIFF ioctl, scoped by the
+// calling thread's current namespace, not by any netlink.Handle).
+func withNetns(name string, fn func() error) error {
+	errCh := make(chan error, 1)
+	go func() {
+		runtime.LockOSThread()
+
+		target, err := netns.GetFromName(name)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer target.Close()
+
+		origin, err := netns.Get()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer origin.Close()
+
+		if err := netns.Set(target); err != nil {
+			errCh <- err
+			return
+		}
+		defer netns.Set(origin)
+
+		errCh <- fn()
+	}()
+	return <-errCh
 }
