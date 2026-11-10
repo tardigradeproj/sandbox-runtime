@@ -229,9 +229,12 @@ func newValidateRunSandboxCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if _, err := nsvc.AttachNetwork(ctx, &v1.AttachNetworkRequest{SandboxId: uid}); err != nil {
+				att, err := nsvc.AttachNetwork(ctx, &v1.AttachNetworkRequest{SandboxId: uid})
+				if err != nil {
 					return err
 				}
+				fmt.Printf("attached network: ip=%s gateway=%s (guest must configure these itself -- nothing does yet)\n",
+					att.GetIpAddress(), att.GetGatewayIp())
 			}
 
 			if _, err := rt.CreateSandbox(ctx, &v1.CreateSandboxRequest{
@@ -264,7 +267,7 @@ func newValidateRunSandboxCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
-	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-13", "sandbox uid")
+	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-21", "sandbox uid")
 	cmd.Flags().Float64Var(&cpu, "cpu", 1, "vCPU count")
 	cmd.Flags().Int64Var(&memoryMib, "memory-mib", 128, "memory size, in MiB")
 	cmd.Flags().Int64Var(&storageMib, "storage-mib", 256, "overlay size, in MiB")
