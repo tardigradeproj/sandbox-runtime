@@ -44,6 +44,14 @@ func defaultBoolTag(t *testing.T, typ reflect.Type, fieldName string) *bool {
 	return &b
 }
 
+// defaultIntTag is defaultTag parsed as an int.
+func defaultIntTag(t *testing.T, typ reflect.Type, fieldName string) int {
+	t.Helper()
+	n, err := strconv.Atoi(defaultTag(t, typ, fieldName))
+	require.NoError(t, err)
+	return n
+}
+
 func boolPtr(b bool) *bool { return &b }
 
 func writeConfig(t *testing.T, contents string) string {
@@ -98,6 +106,11 @@ bridge_name = "sri0"
 	assert.Equal(t, Network{
 		Cidr:       "10.200.5.0/24",
 		BridgeName: "sri0",
+		GuestNetwork: GuestNetwork{
+			TapIP:     defaultTag(t, reflect.TypeOf(GuestNetwork{}), "TapIP"),
+			GuestIP:   defaultTag(t, reflect.TypeOf(GuestNetwork{}), "GuestIP"),
+			PrefixLen: defaultIntTag(t, reflect.TypeOf(GuestNetwork{}), "PrefixLen"),
+		},
 	}, cfg.Network)
 	assert.Equal(t, GRPC{
 		ListenAddress: "unix:///var/run/sandbox-runtime.sock",
@@ -176,9 +189,15 @@ cidr = "10.200.5.0/24"
 			},
 		},
 	}, cfg.Runtime)
+	guestNetworkType := reflect.TypeOf(GuestNetwork{})
 	assert.Equal(t, Network{
 		Cidr:       "10.200.5.0/24",
 		BridgeName: defaultTag(t, reflect.TypeOf(Network{}), "BridgeName"),
+		GuestNetwork: GuestNetwork{
+			TapIP:     defaultTag(t, guestNetworkType, "TapIP"),
+			GuestIP:   defaultTag(t, guestNetworkType, "GuestIP"),
+			PrefixLen: defaultIntTag(t, guestNetworkType, "PrefixLen"),
+		},
 	}, cfg.Network)
 }
 
@@ -394,6 +413,41 @@ cidr = "10.200.5.0/24"
 	cfg, err := Load(path)
 	require.NoError(t, err)
 	assert.Equal(t, defaultTag(t, reflect.TypeOf(Network{}), "BridgeName"), cfg.Network.BridgeName)
+}
+
+func TestLoadNetworkDefaultsGuestNetwork(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+
+	guestNetworkType := reflect.TypeOf(GuestNetwork{})
+	assert.Equal(t, GuestNetwork{
+		TapIP:     defaultTag(t, guestNetworkType, "TapIP"),
+		GuestIP:   defaultTag(t, guestNetworkType, "GuestIP"),
+		PrefixLen: defaultIntTag(t, guestNetworkType, "PrefixLen"),
+	}, cfg.Network.GuestNetwork)
+}
+
+func TestLoadNetworkGuestNetworkOverride(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
+[network.guest_network]
+tap_ip     = "192.168.200.1"
+guest_ip   = "192.168.200.2"
+prefix_len = 31
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, GuestNetwork{
+		TapIP:     "192.168.200.1",
+		GuestIP:   "192.168.200.2",
+		PrefixLen: 31,
+	}, cfg.Network.GuestNetwork)
 }
 
 func TestLoadMissingFile(t *testing.T) {

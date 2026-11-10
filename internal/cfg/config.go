@@ -32,7 +32,17 @@ type Network struct {
 	Cidr string `toml:"cidr"`
 	// BridgeName is the bridge every sandbox on this node attaches
 	// to.
-	BridgeName string `toml:"bridge_name" default:"sri0"`
+	BridgeName   string       `toml:"bridge_name" default:"sri0"`
+	GuestNetwork GuestNetwork `toml:"guest_network"`
+}
+
+// GuestNetwork is the fixed point-to-point pair every sandbox's tap
+// device and guest use -- same for every sandbox, since each one
+// already has its own namespace. See pkg/network.GuestNetwork.
+type GuestNetwork struct {
+	TapIP     string `toml:"tap_ip" default:"169.254.100.1"`
+	GuestIP   string `toml:"guest_ip" default:"169.254.100.2"`
+	PrefixLen int    `toml:"prefix_len" default:"30"`
 }
 
 // Rootfs holds settings for the local rootfs image cache.
@@ -128,6 +138,14 @@ func applyDefaults(v reflect.Value) {
 			if field.String() == "" {
 				if def, ok := t.Field(i).Tag.Lookup("default"); ok {
 					field.SetString(def)
+				}
+			}
+		case reflect.Int:
+			if field.Int() == 0 {
+				if def, ok := t.Field(i).Tag.Lookup("default"); ok {
+					if n, err := strconv.Atoi(def); err == nil {
+						field.SetInt(int64(n))
+					}
 				}
 			}
 		case reflect.Pointer:
