@@ -16,7 +16,7 @@
 
 // Package network implements v1.NetworkServiceServer, a thin gRPC
 // wrapper around pkg/network's node-local bridge/namespace/tap/IP
-// plumbing. See net-design.md.
+// plumbing. See docs/network-design.md.
 package network
 
 import (

@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tardigradeproj/sandbox-runtime/internal/backbone"
+	"github.com/tardigradeproj/sandbox-runtime/internal/backbone/network"
+	"github.com/tardigradeproj/sandbox-runtime/internal/backbone/rootfs"
+	"github.com/tardigradeproj/sandbox-runtime/internal/backbone/runtime"
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
-	"github.com/tardigradeproj/sandbox-runtime/internal/network"
-	"github.com/tardigradeproj/sandbox-runtime/internal/runtime"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 )
@@ -42,7 +42,7 @@ func newValidatePullCmd() *cobra.Command {
 				return err
 			}
 
-			rfs, err := backbone.NewRootFS(c, st)
+			rfs, err := rootfs.NewRootFS(c, st)
 			if err != nil {
 				return err
 			}

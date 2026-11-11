@@ -27,9 +27,10 @@
 ## Service boundary: `NetworkService`
 
 A third `api.proto` service, next to `RuntimeService` and
-`RootFSService`, owned by its own package (`internal/network`, say)
-with no knowledge of internal concepts at all,
-it only ever talks in sandbox IDs and generic network handles.
+`RootFSService`, owned by its own package
+(`internal/backbone/network`, say) with no knowledge of internal
+concepts at all, it only ever talks in sandbox IDs and generic
+network handles.
 
 ```
 service NetworkService {
