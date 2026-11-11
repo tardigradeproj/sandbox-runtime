@@ -39,7 +39,7 @@ it ends.
 A sandbox that's a real microVM rather than a process in namespaces
 can offer lifecycle operations a container can't: pause a running
 sandbox, snapshot its full state — memory, devices, vCPU — to disk,
-and resume it later, on the same host or a different one. Backbone
+and resume it later, on the same host or a different one. Firecracker
 already supports exactly this. Bringing it into SRI turns a sandbox's
 startup time from "however long a kernel and init take" into "however
 long it takes to restore a snapshot", the sandbox equivalent of a
