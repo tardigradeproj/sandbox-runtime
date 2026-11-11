@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package backbone
+package rootfs
 
 import (
 	"archive/tar"
@@ -119,7 +119,7 @@ func newTestRegistry(t *testing.T, repoTag string) string {
 
 func newTestRootFS(t *testing.T, pk packer.Packer) *RootFS {
 	t.Helper()
-	st, err := store.Open(t.TempDir())
+	st, err := store.New(t.TempDir())
 	require.NoError(t, err)
 	return &RootFS{store: st, packer: pk}
 }

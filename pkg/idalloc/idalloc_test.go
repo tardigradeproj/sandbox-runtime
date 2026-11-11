@@ -26,13 +26,13 @@ import (
 )
 
 func TestOpenRejectsInvalidRange(t *testing.T) {
-	_, err := Open(t.TempDir(), 5, 1)
+	_, err := New(t.TempDir(), 5, 1)
 	assert.Error(t, err)
 }
 
 func TestOpenCreatesDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "ids")
-	_, err := Open(dir, 1, 10)
+	_, err := New(dir, 1, 10)
 	require.NoError(t, err)
 	info, err := os.Stat(dir)
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestOpenCreatesDir(t *testing.T) {
 }
 
 func TestAllocateReleaseRoundTrip(t *testing.T) {
-	a, err := Open(t.TempDir(), 100, 102)
+	a, err := New(t.TempDir(), 100, 102)
 	require.NoError(t, err)
 
 	id, err := a.Allocate("sandbox-1")
@@ -56,7 +56,7 @@ func TestAllocateReleaseRoundTrip(t *testing.T) {
 }
 
 func TestAllocateSkipsHeldIds(t *testing.T) {
-	a, err := Open(t.TempDir(), 1, 3)
+	a, err := New(t.TempDir(), 1, 3)
 	require.NoError(t, err)
 
 	first, err := a.Allocate("a")
@@ -67,7 +67,7 @@ func TestAllocateSkipsHeldIds(t *testing.T) {
 }
 
 func TestAllocateExhaustion(t *testing.T) {
-	a, err := Open(t.TempDir(), 1, 2)
+	a, err := New(t.TempDir(), 1, 2)
 	require.NoError(t, err)
 
 	_, err = a.Allocate("a")
@@ -80,14 +80,14 @@ func TestAllocateExhaustion(t *testing.T) {
 }
 
 func TestReleaseUnallocatedIsNotAnError(t *testing.T) {
-	a, err := Open(t.TempDir(), 1, 10)
+	a, err := New(t.TempDir(), 1, 10)
 	require.NoError(t, err)
 	assert.NoError(t, a.Release(7))
 }
 
 func TestAllocationSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
-	a, err := Open(dir, 1, 2)
+	a, err := New(dir, 1, 2)
 	require.NoError(t, err)
 
 	id, err := a.Allocate("sandbox-1")
@@ -96,7 +96,7 @@ func TestAllocationSurvivesReopen(t *testing.T) {
 
 	// Simulate a daemon restart: a fresh Allocator over the same dir
 	// must still see id 1 as held.
-	reopened, err := Open(dir, 1, 2)
+	reopened, err := New(dir, 1, 2)
 	require.NoError(t, err)
 
 	id2, err := reopened.Allocate("sandbox-2")
@@ -109,7 +109,7 @@ func TestAllocationSurvivesReopen(t *testing.T) {
 
 func TestConcurrentAllocateNeverDuplicates(t *testing.T) {
 	const n = 50
-	a, err := Open(t.TempDir(), 1, n)
+	a, err := New(t.TempDir(), 1, n)
 	require.NoError(t, err)
 
 	var (

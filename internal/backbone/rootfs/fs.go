@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package backbone
+package rootfs
 
 import (
 	"context"
@@ -49,7 +49,7 @@ type RootFS struct {
 func NewRootFS(cfg *cfg.Settings, store *store.Store) (*RootFS, error) {
 	pk, err := packer.New(packer.Type(cfg.Rootfs.Packer.Type))
 	if err != nil {
-		return nil, fmt.Errorf("backbone: %w", err)
+		return nil, fmt.Errorf("rootfs: %w", err)
 	}
 	return &RootFS{cfg: cfg, store: store, packer: pk}, nil
 }

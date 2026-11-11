@@ -22,6 +22,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -29,8 +30,8 @@ import (
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/cleanup"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/network"
 	obs "github.com/tardigradeproj/sandbox-runtime/pkg/observability"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/sandboxnet"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -165,6 +166,14 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 		}
 
+		// The tap device (created earlier by AttachNetwork) is owned
+		// by root; without CAP_NET_ADMIN, the jailed uid can only
+		// open it if it's also the device's recorded owner.
+		if err := network.SetTapOwner(sandboxID, uid, gid); err != nil {
+			log.WithError(err).Error("create sandbox: failed to chown tap device for jailer")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
+
 		if fc.Jailer.UIDGID.Mode == "on_demand" {
 			cu.Add(func() {
 				if err := r.jailerIDs.Release(uid); err != nil {
@@ -179,17 +188,20 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 			}
 		})
 
-		netNSPath, err := sandboxnet.Create(sandboxID)
-		if err != nil {
-			log.WithError(err).Error("create sandbox: failed to create network namespace")
-			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
-		}
-		cu.Add(func() {
-			if err := sandboxnet.Delete(sandboxID); err != nil {
-				log.WithError(err).Warn("create sandbox: cleanup: failed to remove network namespace")
-			}
-		})
-		machineCfg.NetNS = netNSPath
+		// Namespace + tap device are provisioned independently, by
+		// NetworkService (see pkg/network), not by CreateSandbox --
+		// RuntimeService and NetworkService don't call each other.
+		// Both the namespace path and the tap device name are fixed
+		// conventions, not values CreateSandbox needs to look up.
+		machineCfg.NetNS = network.NetnsPath(sandboxID)
+		machineCfg.NetworkInterfaces = firecracker.NetworkInterfaces{{
+			StaticConfiguration: &firecracker.StaticNetworkConfiguration{
+				HostDevName: network.TapDeviceName,
+			},
+		}}
+
+		guest := network.GuestNetwork(r.cfg.Network.GuestNetwork)
+		machineCfg.KernelArgs = strings.TrimSpace(machineCfg.KernelArgs + " " + network.GuestIPKernelParam(guest))
 
 		// LogFifo (not LogPath) gets hard-linked into the chroot by the SDK.
 		logPath = filepath.Join(sandboxDir, "firecracker.fifo")

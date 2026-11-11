@@ -43,3 +43,14 @@ images-busybox:
 .PHONY: images-ubuntu
 images-ubuntu:
 	docker build -f $(IMAGES_DIR)/Dockerfile.ubuntu -t sandbox-rootfs-ubuntu $(IMAGES_DIR)
+
+# images-ubuntu-push builds and pushes a multi-platform manifest, so
+# PullRootFS doesn't fail with "no child with platform linux/amd64"
+# on an amd64 host when the image was only ever built on an arm64
+# (e.g. Apple Silicon) dev machine.
+PLATFORMS ?= linux/amd64,linux/arm64
+REGISTRY_IMAGE ?= docker.io/edwinmarrima/tardigradeproj:0.0.2
+
+.PHONY: images-ubuntu-push
+images-ubuntu-push:
+	docker buildx build --platform $(PLATFORMS) -f $(IMAGES_DIR)/Dockerfile.ubuntu -t $(REGISTRY_IMAGE) --push $(IMAGES_DIR)

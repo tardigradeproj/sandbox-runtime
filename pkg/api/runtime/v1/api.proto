@@ -44,6 +44,49 @@ service RootFSService {
   rpc RemoveRootFS(RemoveRootFSRequest) returns (RemoveRootFSResponse) {}
 }
 
+// NetworkService defines the public APIs for attaching and detaching a
+// sandbox's network. It is independent of RuntimeService/RootFSService: it
+// deals only in sandbox IDs and generic network handles, with no knowledge
+// of how a sandbox is actually run.
+service NetworkService {
+  // AttachNetwork provisions networking for a sandbox (namespace, tap
+  // device, IP) and returns the handles needed to actually run it.
+  // Idempotent: calling it again for an already-attached sandbox returns
+  // the existing handle rather than erroring.
+  rpc AttachNetwork(AttachNetworkRequest) returns (AttachNetworkResponse) {}
+
+  // DetachNetwork tears down a sandbox's networking and releases its IP
+  // back to the pool.
+  rpc DetachNetwork(DetachNetworkRequest) returns (DetachNetworkResponse) {}
+}
+
+message AttachNetworkRequest {
+  string sandbox_id = 1;
+}
+
+message AttachNetworkResponse {
+  // NetnsPath is the network namespace to run the sandbox in, e.g. for
+  // jailer's --netns.
+  string netns_path = 1;
+
+  // TapDevice is the tap device created inside that namespace for the
+  // guest's NIC, e.g. for Firecracker's NetworkInterface.host_dev_name.
+  string tap_device = 2;
+
+  // IpAddress is the address assigned to the sandbox, in CIDR form (e.g.
+  // "10.200.5.14/24").
+  string ip_address = 3;
+
+  // GatewayIp is the address the sandbox should route through.
+  string gateway_ip = 4;
+}
+
+message DetachNetworkRequest {
+  string sandbox_id = 1;
+}
+
+message DetachNetworkResponse {}
+
 // RootFSSpec identifies a rootfs the caller wants to resolve, pull, or
 // remove.
 message RootFSSpec {

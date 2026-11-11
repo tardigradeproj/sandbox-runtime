@@ -2,6 +2,7 @@ package cfg
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"reflect"
 	"strconv"
@@ -19,6 +20,29 @@ type Settings struct {
 	GRPC    GRPC    `toml:"grpc"`
 	Logs    Logs    `toml:"logs"`
 	Runtime Runtime `toml:"runtime"`
+	Network Network `toml:"network"`
+}
+
+// Network holds settings for NetworkService, this node's view of
+// sandbox networking. See docs/network-design.md.
+type Network struct {
+	// Cidr is this node's assigned IP range, e.g. "10.200.5.0/24".
+	// No default: every node's range must be explicitly, and
+	// uniquely, assigned.
+	Cidr string `toml:"cidr"`
+	// BridgeName is the bridge every sandbox on this node attaches
+	// to.
+	BridgeName   string       `toml:"bridge_name" default:"sri0"`
+	GuestNetwork GuestNetwork `toml:"guest_network"`
+}
+
+// GuestNetwork is the fixed point-to-point pair every sandbox's tap
+// device and guest use -- same for every sandbox, since each one
+// already has its own namespace. See pkg/network.GuestNetwork.
+type GuestNetwork struct {
+	TapIP     string `toml:"tap_ip" default:"169.254.100.1"`
+	GuestIP   string `toml:"guest_ip" default:"169.254.100.2"`
+	PrefixLen int    `toml:"prefix_len" default:"30"`
 }
 
 // Rootfs holds settings for the local rootfs image cache.
@@ -116,6 +140,14 @@ func applyDefaults(v reflect.Value) {
 					field.SetString(def)
 				}
 			}
+		case reflect.Int:
+			if field.Int() == 0 {
+				if def, ok := t.Field(i).Tag.Lookup("default"); ok {
+					if n, err := strconv.Atoi(def); err == nil {
+						field.SetInt(int64(n))
+					}
+				}
+			}
 		case reflect.Pointer:
 			if !field.IsNil() {
 				continue
@@ -156,9 +188,29 @@ func Load(path string) (*Settings, error) {
 	return &cfg, nil
 }
 
+// validateNetwork requires cidr to be set to a real CIDR with enough
+// host bits to be worth running (roughly a /29 or larger).
+func validateNetwork(n Network) error {
+	if n.Cidr == "" {
+		return fmt.Errorf("network: cidr must be set")
+	}
+	_, ipNet, err := net.ParseCIDR(n.Cidr)
+	if err != nil {
+		return fmt.Errorf("network: cidr %q: %w", n.Cidr, err)
+	}
+	if ones, bits := ipNet.Mask.Size(); bits-ones < 3 {
+		return fmt.Errorf("network: cidr %q is too small, need at least a /29", n.Cidr)
+	}
+	return nil
+}
+
 // validate checks invariants applyDefaults can't express via a plain
 // "default" tag.
 func validate(cfg *Settings) error {
+	if err := validateNetwork(cfg.Network); err != nil {
+		return err
+	}
+
 	j := cfg.Runtime.Firecracker.Jailer
 	if !j.Enabled {
 		return nil

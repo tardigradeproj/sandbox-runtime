@@ -37,7 +37,7 @@ func commitFake(t *testing.T, s *Store, entry Entry) {
 }
 
 func TestStageCommitLookup(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 
 	extractDir, tmpImage, cleanup, err := s.Stage()
@@ -66,7 +66,7 @@ func TestStageCommitLookup(t *testing.T) {
 }
 
 func TestCommitMergesRepoTagsForExistingDigest(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 
 	commitFake(t, s, Entry{Digest: testDigest, RepoTags: []string{"example.com/widget:v1"}})
@@ -79,13 +79,13 @@ func TestCommitMergesRepoTagsForExistingDigest(t *testing.T) {
 }
 
 func TestAddRefRequiresExistingEntry(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 	assert.Error(t, s.AddRef(testDigest, []string{"example.com/widget:v1"}, ""))
 }
 
 func TestAddRefMergesIntoExistingEntry(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 	commitFake(t, s, Entry{Digest: testDigest})
 
@@ -102,7 +102,7 @@ func TestAddRefMergesIntoExistingEntry(t *testing.T) {
 }
 
 func TestAddRefAcceptsMultipleTags(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 	commitFake(t, s, Entry{Digest: testDigest})
 
@@ -117,7 +117,7 @@ func TestAddRefAcceptsMultipleTags(t *testing.T) {
 }
 
 func TestResolveByBareDigestOrRef(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 	commitFake(t, s, Entry{Digest: testDigest, RepoTags: []string{"example.com/widget:v1"}})
 
@@ -135,7 +135,7 @@ func TestResolveByBareDigestOrRef(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 	commitFake(t, s, Entry{Digest: testDigest})
 
@@ -148,7 +148,7 @@ func TestRemove(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 	entries, err := s.List()
 	require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestList(t *testing.T) {
 
 func TestOpenSweepsStaleTmp(t *testing.T) {
 	root := t.TempDir()
-	s, err := Open(root)
+	s, err := New(root)
 	require.NoError(t, err)
 	_, _, cleanup, err := s.Stage()
 	require.NoError(t, err)
@@ -182,13 +182,13 @@ func TestOpenSweepsStaleTmp(t *testing.T) {
 	oldTime := time.Now().Add(-2 * time.Hour)
 	require.NoError(t, os.Chtimes(staleDir, oldTime, oldTime))
 
-	_, err = Open(root)
+	_, err = New(root)
 	require.NoError(t, err)
 	assert.NoDirExists(t, staleDir)
 }
 
 func TestCommitConcurrentSameDigestIsIdempotent(t *testing.T) {
-	s, err := Open(t.TempDir())
+	s, err := New(t.TempDir())
 	require.NoError(t, err)
 
 	const n = 8

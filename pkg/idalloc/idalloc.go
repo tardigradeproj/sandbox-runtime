@@ -30,9 +30,9 @@ type Allocator struct {
 	start, end int
 }
 
-// Open returns an Allocator backed by dir, which is created if it
+// New returns an Allocator backed by dir, which is created if it
 // doesn't already exist. start and end are inclusive.
-func Open(dir string, start, end int) (*Allocator, error) {
+func New(dir string, start, end int) (*Allocator, error) {
 	if start > end {
 		return nil, fmt.Errorf("idalloc: start %d must be <= end %d", start, end)
 	}

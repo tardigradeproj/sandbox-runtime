@@ -44,6 +44,14 @@ func defaultBoolTag(t *testing.T, typ reflect.Type, fieldName string) *bool {
 	return &b
 }
 
+// defaultIntTag is defaultTag parsed as an int.
+func defaultIntTag(t *testing.T, typ reflect.Type, fieldName string) int {
+	t.Helper()
+	n, err := strconv.Atoi(defaultTag(t, typ, fieldName))
+	require.NoError(t, err)
+	return n
+}
+
 func boolPtr(b bool) *bool { return &b }
 
 func writeConfig(t *testing.T, contents string) string {
@@ -80,6 +88,10 @@ default_boot_args = "console=ttyS0 reboot=k panic=1 pci=off"
 level = "Info"
 show_level = true
 show_log_origin = false
+
+[network]
+cidr = "10.200.5.0/24"
+bridge_name = "sri0"
 `)
 
 	cfg, err := Load(path)
@@ -91,6 +103,15 @@ show_log_origin = false
 	}, cfg.Rootfs)
 	assert.Equal(t, "/srv/fc", cfg.State)
 	assert.Equal(t, "0.1.0", cfg.Version)
+	assert.Equal(t, Network{
+		Cidr:       "10.200.5.0/24",
+		BridgeName: "sri0",
+		GuestNetwork: GuestNetwork{
+			TapIP:     defaultTag(t, reflect.TypeOf(GuestNetwork{}), "TapIP"),
+			GuestIP:   defaultTag(t, reflect.TypeOf(GuestNetwork{}), "GuestIP"),
+			PrefixLen: defaultIntTag(t, reflect.TypeOf(GuestNetwork{}), "PrefixLen"),
+		},
+	}, cfg.Network)
 	assert.Equal(t, GRPC{
 		ListenAddress: "unix:///var/run/sandbox-runtime.sock",
 	}, cfg.GRPC)
@@ -119,7 +140,10 @@ show_log_origin = false
 }
 
 func TestLoadAppliesDefaults(t *testing.T) {
-	path := writeConfig(t, ``)
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+`)
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
@@ -165,6 +189,16 @@ func TestLoadAppliesDefaults(t *testing.T) {
 			},
 		},
 	}, cfg.Runtime)
+	guestNetworkType := reflect.TypeOf(GuestNetwork{})
+	assert.Equal(t, Network{
+		Cidr:       "10.200.5.0/24",
+		BridgeName: defaultTag(t, reflect.TypeOf(Network{}), "BridgeName"),
+		GuestNetwork: GuestNetwork{
+			TapIP:     defaultTag(t, guestNetworkType, "TapIP"),
+			GuestIP:   defaultTag(t, guestNetworkType, "GuestIP"),
+			PrefixLen: defaultIntTag(t, guestNetworkType, "PrefixLen"),
+		},
+	}, cfg.Network)
 }
 
 func TestLoadAppliesDefaultsPerField(t *testing.T) {
@@ -180,6 +214,10 @@ bin = "/custom/firecracker"
 
 [runtime.firecracker.log]
 show_level = false
+
+[network]
+cidr = "10.200.5.0/24"
+bridge_name = "custom-br0"
 `)
 
 	cfg, err := Load(path)
@@ -202,10 +240,15 @@ show_level = false
 	require.NotNil(t, cfg.Runtime.Firecracker.Log.ShowLevel)
 	assert.False(t, *cfg.Runtime.Firecracker.Log.ShowLevel)
 	assert.Equal(t, defaultBoolTag(t, firecrackerLogType, "ShowLogOrigin"), cfg.Runtime.Firecracker.Log.ShowLogOrigin)
+	assert.Equal(t, "10.200.5.0/24", cfg.Network.Cidr)
+	assert.Equal(t, "custom-br0", cfg.Network.BridgeName)
 }
 
 func TestLoadJailerDefaultsWhenDisabled(t *testing.T) {
-	path := writeConfig(t, ``)
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+`)
 
 	cfg, err := Load(path)
 	require.NoError(t, err)
@@ -223,6 +266,9 @@ func TestLoadJailerDefaultsWhenDisabled(t *testing.T) {
 
 func TestLoadJailerPrecreatedRequiresStaticUIDAndGID(t *testing.T) {
 	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
 [runtime.firecracker.jailer]
 enabled = true
 
@@ -235,6 +281,9 @@ mode = "precreated"
 
 func TestLoadJailerPrecreatedWithStaticUIDAndGIDSucceeds(t *testing.T) {
 	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
 [runtime.firecracker.jailer]
 enabled = true
 
@@ -255,6 +304,9 @@ static_gid = 456
 
 func TestLoadJailerOnDemandRequiresRange(t *testing.T) {
 	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
 [runtime.firecracker.jailer]
 enabled = true
 
@@ -267,6 +319,9 @@ mode = "on_demand"
 
 func TestLoadJailerOnDemandRejectsInvalidRange(t *testing.T) {
 	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
 [runtime.firecracker.jailer]
 enabled = true
 
@@ -281,6 +336,9 @@ range_end = 1000
 
 func TestLoadJailerOnDemandWithValidRangeSucceeds(t *testing.T) {
 	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
 [runtime.firecracker.jailer]
 enabled = true
 
@@ -301,6 +359,9 @@ range_end = 100999
 
 func TestLoadJailerRejectsUnknownMode(t *testing.T) {
 	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
 [runtime.firecracker.jailer]
 enabled = true
 
@@ -309,6 +370,84 @@ mode = "bogus"
 `)
 	_, err := Load(path)
 	assert.Error(t, err)
+}
+
+func TestLoadNetworkRequiresCidr(t *testing.T) {
+	path := writeConfig(t, ``)
+	_, err := Load(path)
+	assert.Error(t, err)
+}
+
+func TestLoadNetworkRejectsInvalidCidr(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "not-a-cidr"
+`)
+	_, err := Load(path)
+	assert.Error(t, err)
+}
+
+func TestLoadNetworkRejectsTooSmallCidr(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/30"
+`)
+	_, err := Load(path)
+	assert.Error(t, err)
+}
+
+func TestLoadNetworkAcceptsMinimumCidr(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/29"
+`)
+	_, err := Load(path)
+	assert.NoError(t, err)
+}
+
+func TestLoadNetworkDefaultsBridgeName(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, defaultTag(t, reflect.TypeOf(Network{}), "BridgeName"), cfg.Network.BridgeName)
+}
+
+func TestLoadNetworkDefaultsGuestNetwork(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+
+	guestNetworkType := reflect.TypeOf(GuestNetwork{})
+	assert.Equal(t, GuestNetwork{
+		TapIP:     defaultTag(t, guestNetworkType, "TapIP"),
+		GuestIP:   defaultTag(t, guestNetworkType, "GuestIP"),
+		PrefixLen: defaultIntTag(t, guestNetworkType, "PrefixLen"),
+	}, cfg.Network.GuestNetwork)
+}
+
+func TestLoadNetworkGuestNetworkOverride(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
+[network.guest_network]
+tap_ip     = "192.168.200.1"
+guest_ip   = "192.168.200.2"
+prefix_len = 31
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, GuestNetwork{
+		TapIP:     "192.168.200.1",
+		GuestIP:   "192.168.200.2",
+		PrefixLen: 31,
+	}, cfg.Network.GuestNetwork)
 }
 
 func TestLoadMissingFile(t *testing.T) {

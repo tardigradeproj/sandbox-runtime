@@ -24,7 +24,7 @@ spec.yaml
 # Go workspace file
 go.work
 go.work.sum
-
+net.md
 # env file
 .env
 

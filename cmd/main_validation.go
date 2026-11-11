@@ -9,9 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tardigradeproj/sandbox-runtime/internal/backbone"
+	"github.com/tardigradeproj/sandbox-runtime/internal/backbone/network"
+	"github.com/tardigradeproj/sandbox-runtime/internal/backbone/rootfs"
+	"github.com/tardigradeproj/sandbox-runtime/internal/backbone/runtime"
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
-	"github.com/tardigradeproj/sandbox-runtime/internal/runtime"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 )
@@ -36,12 +37,12 @@ func newValidatePullCmd() *cobra.Command {
 				return err
 			}
 
-			st, err := store.Open(c.Rootfs.Dir)
+			st, err := store.New(c.Rootfs.Dir)
 			if err != nil {
 				return err
 			}
 
-			rfs, err := backbone.NewRootFS(c, st)
+			rfs, err := rootfs.NewRootFS(c, st)
 			if err != nil {
 				return err
 			}
@@ -89,7 +90,7 @@ func newValidateCreateSandboxCmd() *cobra.Command {
 				return err
 			}
 
-			st, err := store.Open(c.Rootfs.Dir)
+			st, err := store.New(c.Rootfs.Dir)
 			if err != nil {
 				return err
 			}
@@ -148,7 +149,7 @@ func newValidateStartSandboxCmd() *cobra.Command {
 				return err
 			}
 
-			st, err := store.Open(c.Rootfs.Dir)
+			st, err := store.New(c.Rootfs.Dir)
 			if err != nil {
 				return err
 			}
@@ -208,7 +209,7 @@ func newValidateRunSandboxCmd() *cobra.Command {
 				return err
 			}
 
-			st, err := store.Open(c.Rootfs.Dir)
+			st, err := store.New(c.Rootfs.Dir)
 			if err != nil {
 				return err
 			}
@@ -219,6 +220,23 @@ func newValidateRunSandboxCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
+
+			// CreateSandbox assumes the sandbox's namespace and tap
+			// device already exist (see pkg/network) -- only needed
+			// when jailer namespace-isolates the sandbox at all.
+			if c.Runtime.Firecracker.Jailer.Enabled {
+				nsvc, err := network.New(c)
+				if err != nil {
+					return err
+				}
+				att, err := nsvc.AttachNetwork(ctx, &v1.AttachNetworkRequest{SandboxId: uid})
+				if err != nil {
+					return err
+				}
+				fmt.Printf("attached network: ip=%s gateway=%s (guest must configure these itself -- nothing does yet)\n",
+					att.GetIpAddress(), att.GetGatewayIp())
+			}
+
 			if _, err := rt.CreateSandbox(ctx, &v1.CreateSandboxRequest{
 				Config: &v1.SandboxConfig{
 					Metadata: &v1.SandboxMetadata{Uid: uid},
@@ -249,7 +267,7 @@ func newValidateRunSandboxCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
-	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-11", "sandbox uid")
+	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-21", "sandbox uid")
 	cmd.Flags().Float64Var(&cpu, "cpu", 1, "vCPU count")
 	cmd.Flags().Int64Var(&memoryMib, "memory-mib", 128, "memory size, in MiB")
 	cmd.Flags().Int64Var(&storageMib, "storage-mib", 256, "overlay size, in MiB")

@@ -53,7 +53,7 @@ func NewRuntime(cfg *cfg.Settings, store *store.Store) (*Runtime, error) {
 			return nil, fmt.Errorf("failed to create jailer chroot base dir: %w", err)
 		}
 		if j.UIDGID.Mode == "on_demand" {
-			a, err := idalloc.Open(filepath.Join(cfg.State, "jailer-ids"), *j.UIDGID.RangeStart, *j.UIDGID.RangeEnd)
+			a, err := idalloc.New(filepath.Join(cfg.State, "jailer-ids"), *j.UIDGID.RangeStart, *j.UIDGID.RangeEnd)
 			if err != nil {
 				return nil, fmt.Errorf("failed to open jailer id allocator: %w", err)
 			}
