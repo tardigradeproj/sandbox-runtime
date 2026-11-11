@@ -15,7 +15,7 @@
 //go:build linux
 
 // Package network provisions per-sandbox networking (namespace, tap
-// device, veth-to-bridge egress, IP) for one node. See net-design.md.
+// device, veth-to-bridge egress, IP) for one node. See docs/network-design.md.
 package network
 
 import (

@@ -24,7 +24,7 @@ type Settings struct {
 }
 
 // Network holds settings for NetworkService, this node's view of
-// sandbox networking. See net-design.md.
+// sandbox networking. See docs/network-design.md.
 type Network struct {
 	// Cidr is this node's assigned IP range, e.g. "10.200.5.0/24".
 	// No default: every node's range must be explicitly, and

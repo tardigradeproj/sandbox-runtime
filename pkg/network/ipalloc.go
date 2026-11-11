@@ -29,7 +29,7 @@ import (
 // ipAllocator hands out addresses from a CIDR, minus its network,
 // broadcast, and gateway addresses, backed by marker files on disk --
 // one per allocated address, filename the address itself (e.g.
-// "10.200.5.14"), content the owning sandbox ID. See net-design.md.
+// "10.200.5.14"), content the owning sandbox ID. See docs/network-design.md.
 type ipAllocator struct {
 	dir            string // one marker file per allocated offset
 	lastOffsetFile string // round-robin resume point
