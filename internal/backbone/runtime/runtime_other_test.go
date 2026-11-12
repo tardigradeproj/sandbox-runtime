@@ -42,3 +42,10 @@ func TestStartSandboxUnimplementedOffLinux(t *testing.T) {
 	_, err = r.StartSandbox(context.Background(), &v1.StartSandboxRequest{})
 	assert.Equal(t, codes.Unimplemented, status.Code(err))
 }
+
+func TestStopSandboxUnimplementedOffLinux(t *testing.T) {
+	r, err := NewRuntime(&cfg.Settings{State: t.TempDir()}, nil)
+	require.NoError(t, err)
+	_, err = r.StopSandbox(context.Background(), &v1.StopSandboxRequest{})
+	assert.Equal(t, codes.Unimplemented, status.Code(err))
+}

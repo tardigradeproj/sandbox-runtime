@@ -23,6 +23,12 @@ option go_package = "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v
 service RuntimeService {
   rpc CreateSandbox(CreateSandboxRequest) returns (CreateSandboxResponse) {}
   rpc StartSandbox(StartSandboxRequest) returns (StartSandboxResponse) {}
+
+  // StopSandbox pauses a running sandbox's vCPUs. The process keeps
+  // running and its memory/CPU allocation is not released. Idempotent:
+  // stopping an already-stopped sandbox succeeds. See ResumeSandbox to
+  // undo it.
+  rpc StopSandbox(StopSandboxRequest) returns (StopSandboxResponse) {}
 }
 
 // RootFSService defines the public APIs for managing sandbox root
@@ -255,3 +261,9 @@ message StartSandboxRequest {
 }
 
 message StartSandboxResponse {}
+
+message StopSandboxRequest {
+  string sandbox_id = 1;
+}
+
+message StopSandboxResponse {}

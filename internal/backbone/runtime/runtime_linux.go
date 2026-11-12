@@ -335,3 +335,37 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 	log.Info("sandbox started")
 	return &v1.StartSandboxResponse{}, nil
 }
+
+// StopSandbox pauses a running sandbox's vCPUs over its API socket,
+// the same reconnect-by-socket pattern as StartSandbox.
+func (r *Runtime) StopSandbox(ctx context.Context, req *v1.StopSandboxRequest) (*v1.StopSandboxResponse, error) {
+	sandboxID := req.GetSandboxId()
+	if sandboxID == "" {
+		return nil, status.Error(codes.InvalidArgument, "sandbox_id must be set")
+	}
+	log := logrus.WithField(obs.SandboxID, sandboxID)
+	log.Info("stopping sandbox")
+
+	fc := r.cfg.Runtime.Firecracker
+	socketPath := filepath.Join(r.cfg.State, sandboxID, firecrackerSocketName)
+	if fc.Jailer.Enabled {
+		socketPath = jailerSocketPath(fc, sandboxID)
+	}
+	if _, err := os.Stat(socketPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "sandbox %q not found", sandboxID)
+		}
+		log.WithError(err).Error("stop sandbox: failed to stat socket")
+		return nil, status.Errorf(codes.Internal, "stop sandbox: %v", err)
+	}
+
+	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	vm := &models.VM{State: firecracker.String(models.VMStatePaused)}
+	if _, err := client.PatchVM(ctx, vm); err != nil {
+		log.WithError(err).Error("stop sandbox: failed to pause vm")
+		return nil, status.Errorf(codes.Internal, "stop sandbox: %v", err)
+	}
+
+	log.Info("sandbox stopped")
+	return &v1.StopSandboxResponse{}, nil
+}

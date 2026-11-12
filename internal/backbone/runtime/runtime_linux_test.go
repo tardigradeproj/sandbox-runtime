@@ -594,3 +594,51 @@ func TestStartSandboxSuccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(got), "PUT /actions")
 }
+
+func TestStopSandboxRequiresSandboxId(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, err := r.StopSandbox(context.Background(), &v1.StopSandboxRequest{})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestStopSandboxUnknownSandbox(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, err := r.StopSandbox(context.Background(), &v1.StopSandboxRequest{SandboxId: "does-not-exist"})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// TestStopSandboxSuccess creates a real sandbox (fake firecracker
+// process and all) and stops it, verifying StopSandbox actually sent
+// a PATCH /vm to the running process' socket rather than just
+// succeeding vacuously.
+func TestStopSandboxSuccess(t *testing.T) {
+	fakeMkfsExt4(t, filepath.Join(t.TempDir(), "args.txt"))
+
+	reqLogPath := filepath.Join(t.TempDir(), "requests.log")
+	require.NoError(t, os.Setenv(fakeFirecrackerReqLogEnv, reqLogPath))
+	t.Cleanup(func() { os.Unsetenv(fakeFirecrackerReqLogEnv) })
+
+	stateDir := t.TempDir()
+	r, st := newTestRuntimeWithFakeFirecracker(t, stateDir, false)
+	seedRootfsEntry(t, st, "myimage:latest")
+
+	createResp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
+		Config: &v1.SandboxConfig{
+			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources: &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = r.StopSandbox(context.Background(), &v1.StopSandboxRequest{SandboxId: createResp.GetSandboxId()})
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(reqLogPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(got), "PATCH /vm")
+
+	// Stopping an already-paused sandbox is idempotent, not an error.
+	_, err = r.StopSandbox(context.Background(), &v1.StopSandboxRequest{SandboxId: createResp.GetSandboxId()})
+	require.NoError(t, err)
+}

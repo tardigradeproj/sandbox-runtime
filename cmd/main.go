@@ -49,6 +49,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newValidatePullCmd())
 	cmd.AddCommand(newValidateCreateSandboxCmd())
 	cmd.AddCommand(newValidateStartSandboxCmd())
+	cmd.AddCommand(newValidateStopSandboxCmd())
 	cmd.AddCommand(newValidateRunSandboxCmd())
 
 	return cmd

@@ -35,6 +35,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	RuntimeService_CreateSandbox_FullMethodName = "/runtime.v1.RuntimeService/CreateSandbox"
 	RuntimeService_StartSandbox_FullMethodName  = "/runtime.v1.RuntimeService/StartSandbox"
+	RuntimeService_StopSandbox_FullMethodName   = "/runtime.v1.RuntimeService/StopSandbox"
 )
 
 // RuntimeServiceClient is the client API for RuntimeService service.
@@ -46,6 +47,11 @@ const (
 type RuntimeServiceClient interface {
 	CreateSandbox(ctx context.Context, in *CreateSandboxRequest, opts ...grpc.CallOption) (*CreateSandboxResponse, error)
 	StartSandbox(ctx context.Context, in *StartSandboxRequest, opts ...grpc.CallOption) (*StartSandboxResponse, error)
+	// StopSandbox pauses a running sandbox's vCPUs. The process keeps
+	// running and its memory/CPU allocation is not released. Idempotent:
+	// stopping an already-stopped sandbox succeeds. See ResumeSandbox to
+	// undo it.
+	StopSandbox(ctx context.Context, in *StopSandboxRequest, opts ...grpc.CallOption) (*StopSandboxResponse, error)
 }
 
 type runtimeServiceClient struct {
@@ -76,6 +82,16 @@ func (c *runtimeServiceClient) StartSandbox(ctx context.Context, in *StartSandbo
 	return out, nil
 }
 
+func (c *runtimeServiceClient) StopSandbox(ctx context.Context, in *StopSandboxRequest, opts ...grpc.CallOption) (*StopSandboxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StopSandboxResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_StopSandbox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RuntimeServiceServer is the server API for RuntimeService service.
 // All implementations must embed UnimplementedRuntimeServiceServer
 // for forward compatibility.
@@ -85,6 +101,11 @@ func (c *runtimeServiceClient) StartSandbox(ctx context.Context, in *StartSandbo
 type RuntimeServiceServer interface {
 	CreateSandbox(context.Context, *CreateSandboxRequest) (*CreateSandboxResponse, error)
 	StartSandbox(context.Context, *StartSandboxRequest) (*StartSandboxResponse, error)
+	// StopSandbox pauses a running sandbox's vCPUs. The process keeps
+	// running and its memory/CPU allocation is not released. Idempotent:
+	// stopping an already-stopped sandbox succeeds. See ResumeSandbox to
+	// undo it.
+	StopSandbox(context.Context, *StopSandboxRequest) (*StopSandboxResponse, error)
 	mustEmbedUnimplementedRuntimeServiceServer()
 }
 
@@ -100,6 +121,9 @@ func (UnimplementedRuntimeServiceServer) CreateSandbox(context.Context, *CreateS
 }
 func (UnimplementedRuntimeServiceServer) StartSandbox(context.Context, *StartSandboxRequest) (*StartSandboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartSandbox not implemented")
+}
+func (UnimplementedRuntimeServiceServer) StopSandbox(context.Context, *StopSandboxRequest) (*StopSandboxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StopSandbox not implemented")
 }
 func (UnimplementedRuntimeServiceServer) mustEmbedUnimplementedRuntimeServiceServer() {}
 func (UnimplementedRuntimeServiceServer) testEmbeddedByValue()                        {}
@@ -158,6 +182,24 @@ func _RuntimeService_StartSandbox_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RuntimeService_StopSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StopSandboxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).StopSandbox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_StopSandbox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).StopSandbox(ctx, req.(*StopSandboxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RuntimeService_ServiceDesc is the grpc.ServiceDesc for RuntimeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -172,6 +214,10 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StartSandbox",
 			Handler:    _RuntimeService_StartSandbox_Handler,
+		},
+		{
+			MethodName: "StopSandbox",
+			Handler:    _RuntimeService_StopSandbox_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
