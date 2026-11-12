@@ -42,8 +42,6 @@ range_start = 100000
 range_end   = 100999
 
 [network]
-# This node's assigned range -- see docs/network-design.md. Single-node dev
-# setup, so any private range not already in use works.
 cidr        = "10.200.5.0/24"
 bridge_name = "sri0"
 
