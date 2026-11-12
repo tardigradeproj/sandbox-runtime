@@ -29,6 +29,11 @@ service RuntimeService {
   // stopping an already-stopped sandbox succeeds. See ResumeSandbox to
   // undo it.
   rpc StopSandbox(StopSandboxRequest) returns (StopSandboxResponse) {}
+
+  // CheckpointSandbox captures a stopped sandbox's VM state to disk,
+  // so CreateSandbox can later resume a new sandbox from it. Requires
+  // the sandbox to already be stopped; fails if it's still running.
+  rpc CheckpointSandbox(CheckpointSandboxRequest) returns (CheckpointSandboxResponse) {}
 }
 
 // RootFSService defines the public APIs for managing sandbox root
@@ -267,3 +272,13 @@ message StopSandboxRequest {
 }
 
 message StopSandboxResponse {}
+
+message CheckpointSandboxRequest {
+  string sandbox_id = 1;
+}
+
+message CheckpointSandboxResponse {
+  // CheckpointRef identifies the checkpoint for a later CreateSandbox
+  // call -- the same role RootfsRef plays for PullRootFS.
+  string checkpoint_ref = 1;
+}

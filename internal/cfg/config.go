@@ -11,7 +11,8 @@ import (
 )
 
 type Settings struct {
-	Rootfs Rootfs `toml:"rootfs"`
+	Rootfs     Rootfs     `toml:"rootfs"`
+	Checkpoint Checkpoint `toml:"checkpoint"`
 	// State is the directory under which per-sandbox microVM state (API
 	// sockets, overlay images, etc.) is placed.
 	State string `toml:"state" default:"/run/sandbox-runtime"`
@@ -59,6 +60,29 @@ type Rootfs struct {
 type Packer struct {
 	// Type is "erofs" or "ext4".
 	Type string `toml:"type" default:"erofs"`
+}
+
+// Checkpoint holds settings for the local sandbox checkpoint store
+// (see RuntimeService.CheckpointSandbox).
+type Checkpoint struct {
+	// Dir is the directory under which sandbox checkpoints are
+	// persisted.
+	Dir string `toml:"dir" default:"/var/lib/sandbox-runtime/checkpoints"`
+	// Compression configures how the sandbox's overlay is compressed
+	// when it's copied into the checkpoint's own storage.
+	Compression Compression `toml:"compression"`
+}
+
+// Compression configures compressing a checkpoint's overlay copy.
+// Only the overlay needs this -- it's a large, mostly-sparse ext4
+// image; the memory/snapshot-state files Firecracker itself produces
+// to the same checkpoint aren't sparse the same way.
+type Compression struct {
+	// Format is "zstd", "gzip", or "none".
+	Format string `toml:"format" default:"zstd"`
+	// Level's valid range depends on Format (zstd: 1-19 or 1-22 with
+	// --ultra, gzip: 1-9). Default matches zstd's own default level.
+	Level int `toml:"level" default:"3"`
 }
 
 // GRPC holds settings for the gRPC server.

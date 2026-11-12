@@ -33,9 +33,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RuntimeService_CreateSandbox_FullMethodName = "/runtime.v1.RuntimeService/CreateSandbox"
-	RuntimeService_StartSandbox_FullMethodName  = "/runtime.v1.RuntimeService/StartSandbox"
-	RuntimeService_StopSandbox_FullMethodName   = "/runtime.v1.RuntimeService/StopSandbox"
+	RuntimeService_CreateSandbox_FullMethodName     = "/runtime.v1.RuntimeService/CreateSandbox"
+	RuntimeService_StartSandbox_FullMethodName      = "/runtime.v1.RuntimeService/StartSandbox"
+	RuntimeService_StopSandbox_FullMethodName       = "/runtime.v1.RuntimeService/StopSandbox"
+	RuntimeService_CheckpointSandbox_FullMethodName = "/runtime.v1.RuntimeService/CheckpointSandbox"
 )
 
 // RuntimeServiceClient is the client API for RuntimeService service.
@@ -52,6 +53,10 @@ type RuntimeServiceClient interface {
 	// stopping an already-stopped sandbox succeeds. See ResumeSandbox to
 	// undo it.
 	StopSandbox(ctx context.Context, in *StopSandboxRequest, opts ...grpc.CallOption) (*StopSandboxResponse, error)
+	// CheckpointSandbox captures a stopped sandbox's VM state to disk,
+	// so CreateSandbox can later resume a new sandbox from it. Requires
+	// the sandbox to already be stopped; fails if it's still running.
+	CheckpointSandbox(ctx context.Context, in *CheckpointSandboxRequest, opts ...grpc.CallOption) (*CheckpointSandboxResponse, error)
 }
 
 type runtimeServiceClient struct {
@@ -92,6 +97,16 @@ func (c *runtimeServiceClient) StopSandbox(ctx context.Context, in *StopSandboxR
 	return out, nil
 }
 
+func (c *runtimeServiceClient) CheckpointSandbox(ctx context.Context, in *CheckpointSandboxRequest, opts ...grpc.CallOption) (*CheckpointSandboxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckpointSandboxResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_CheckpointSandbox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RuntimeServiceServer is the server API for RuntimeService service.
 // All implementations must embed UnimplementedRuntimeServiceServer
 // for forward compatibility.
@@ -106,6 +121,10 @@ type RuntimeServiceServer interface {
 	// stopping an already-stopped sandbox succeeds. See ResumeSandbox to
 	// undo it.
 	StopSandbox(context.Context, *StopSandboxRequest) (*StopSandboxResponse, error)
+	// CheckpointSandbox captures a stopped sandbox's VM state to disk,
+	// so CreateSandbox can later resume a new sandbox from it. Requires
+	// the sandbox to already be stopped; fails if it's still running.
+	CheckpointSandbox(context.Context, *CheckpointSandboxRequest) (*CheckpointSandboxResponse, error)
 	mustEmbedUnimplementedRuntimeServiceServer()
 }
 
@@ -124,6 +143,9 @@ func (UnimplementedRuntimeServiceServer) StartSandbox(context.Context, *StartSan
 }
 func (UnimplementedRuntimeServiceServer) StopSandbox(context.Context, *StopSandboxRequest) (*StopSandboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StopSandbox not implemented")
+}
+func (UnimplementedRuntimeServiceServer) CheckpointSandbox(context.Context, *CheckpointSandboxRequest) (*CheckpointSandboxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckpointSandbox not implemented")
 }
 func (UnimplementedRuntimeServiceServer) mustEmbedUnimplementedRuntimeServiceServer() {}
 func (UnimplementedRuntimeServiceServer) testEmbeddedByValue()                        {}
@@ -200,6 +222,24 @@ func _RuntimeService_StopSandbox_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RuntimeService_CheckpointSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckpointSandboxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).CheckpointSandbox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_CheckpointSandbox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).CheckpointSandbox(ctx, req.(*CheckpointSandboxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RuntimeService_ServiceDesc is the grpc.ServiceDesc for RuntimeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -218,6 +258,10 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopSandbox",
 			Handler:    _RuntimeService_StopSandbox_Handler,
+		},
+		{
+			MethodName: "CheckpointSandbox",
+			Handler:    _RuntimeService_CheckpointSandbox_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

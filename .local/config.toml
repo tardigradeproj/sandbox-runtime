@@ -7,6 +7,12 @@ dir = "/var/lib/sandbox-runtime/rootfs"
 [rootfs.packer]
 type = "ext4"
 
+[checkpoint]
+dir = "/var/lib/sandbox-runtime/checkpoints"
+[checkpoint.compression]
+format = "zstd"
+level  = 3
+
 [grpc]
 listen_address = "unix:///var/run/sandbox-runtime.sock"
 

@@ -160,6 +160,16 @@ cidr = "10.200.5.0/24"
 		Dir:    defaultTag(t, rootfsType, "Dir"),
 		Packer: Packer{Type: defaultTag(t, packerType, "Type")},
 	}, cfg.Rootfs)
+
+	checkpointType := reflect.TypeOf(Checkpoint{})
+	compressionType := reflect.TypeOf(Compression{})
+	assert.Equal(t, Checkpoint{
+		Dir: defaultTag(t, checkpointType, "Dir"),
+		Compression: Compression{
+			Format: defaultTag(t, compressionType, "Format"),
+			Level:  defaultIntTag(t, compressionType, "Level"),
+		},
+	}, cfg.Checkpoint)
 	assert.Equal(t, defaultTag(t, configType, "State"), cfg.State)
 	assert.Equal(t, defaultTag(t, configType, "Version"), cfg.Version)
 	assert.Equal(t, GRPC{
@@ -448,6 +458,42 @@ prefix_len = 31
 		GuestIP:   "192.168.200.2",
 		PrefixLen: 31,
 	}, cfg.Network.GuestNetwork)
+}
+
+func TestLoadCheckpointDefaultsCompression(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+
+	compressionType := reflect.TypeOf(Compression{})
+	assert.Equal(t, Compression{
+		Format: defaultTag(t, compressionType, "Format"),
+		Level:  defaultIntTag(t, compressionType, "Level"),
+	}, cfg.Checkpoint.Compression)
+}
+
+func TestLoadCheckpointCompressionOverride(t *testing.T) {
+	path := writeConfig(t, `
+[network]
+cidr = "10.200.5.0/24"
+
+[checkpoint]
+dir = "/data/checkpoints"
+
+[checkpoint.compression]
+format = "gzip"
+level  = 6
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, "/data/checkpoints", cfg.Checkpoint.Dir)
+	assert.Equal(t, Compression{
+		Format: "gzip",
+		Level:  6,
+	}, cfg.Checkpoint.Compression)
 }
 
 func TestLoadMissingFile(t *testing.T) {
