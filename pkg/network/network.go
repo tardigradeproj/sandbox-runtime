@@ -183,7 +183,10 @@ func (n *Network) ensureNAT(ctx context.Context) error {
 // device inside it for the guest NIC (fixed address, see n.guest),
 // and a veth pair out to this node's bridge for egress, with the
 // guest's traffic NATed from n.guest.GuestIP to the sandbox's real
-// allocated address as it crosses from tap0 to veth-ns.
+// allocated address as it crosses from tap0 to veth-ns. The reverse
+// direction is NATed too: any traffic arriving at the sandbox's real
+// address, on any port or protocol, is redirected to the guest --
+// see the host-reachability DNAT rule below.
 func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, error) {
 	// Created first, before allocating an IP: if sandboxID is already
 	// attached, this fails fast (ErrSandboxExists) without leaking a
@@ -317,7 +320,19 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 			return fmt.Errorf("add forward accept rule: %w", err)
 		}
 		// ip netns exec <sandboxID> iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-		return run(ctx, "iptables", "-A", "FORWARD", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT")
+		if err := run(ctx, "iptables", "-A", "FORWARD", "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"); err != nil {
+			return fmt.Errorf("add forward established rule: %w", err)
+		}
+
+		// Host reachability: redirect anything arriving at this
+		// sandbox's real address -- any port, any protocol -- to the
+		// guest's fixed address instead.
+		// ip netns exec <sandboxID> iptables -t nat -A PREROUTING -d <ip> -j DNAT --to-destination 169.254.100.2
+		if err := run(ctx, "iptables", "-t", "nat", "-A", "PREROUTING", "-d", ip.String(), "-j", "DNAT", "--to-destination", n.guest.GuestIP); err != nil {
+			return fmt.Errorf("add host-reachability dnat rule: %w", err)
+		}
+		// ip netns exec <sandboxID> iptables -A FORWARD -d 169.254.100.2 -j ACCEPT
+		return run(ctx, "iptables", "-A", "FORWARD", "-d", n.guest.GuestIP, "-j", "ACCEPT")
 	})
 	if err != nil {
 		return Attachment{}, fmt.Errorf("network: %w", err)

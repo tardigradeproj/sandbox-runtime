@@ -205,10 +205,42 @@ hand-synced copy of the same values.
 
 Consequence: the guest never needs to learn its real, dynamically
 allocated address at all — it always configures the same fixed pair,
-every sandbox, every time. `AttachNetwork`'s `ip_address`/`gateway_ip`
-exist purely for the node's own bookkeeping (and whatever external
-visibility a caller wants into "which real address is this sandbox
-using"), not for the guest.
+every sandbox, every time. The one thing the real address *is* for,
+from the guest's perspective, is the reverse direction: see "Host
+reachability" below.
+
+## Host reachability
+
+`AttachNetwork`'s real address isn't just the guest's egress identity
+-- it's also how the host (or another sandbox on the same bridge)
+reaches the guest, on any port or protocol, without needing to enter
+the sandbox's namespace at all.
+
+A third rule, alongside the inner NAT above, scoped to the same
+namespace:
+
+```
+iptables -t nat -A PREROUTING -d <real address> -j DNAT --to-destination 169.254.100.2
+iptables -A FORWARD -d 169.254.100.2 -j ACCEPT
+```
+
+No port or protocol match -- a bare `-d` DNAT rewrites the
+destination for every protocol conntrack can track (TCP, UDP, ICMP,
+...), before the kernel decides "deliver locally" vs. "forward".
+Nothing else ever listens on `veth-ns` itself, so redirecting
+everything unconditionally is safe: there's no legitimate "local"
+traffic on that address to preserve.
+
+This makes `curl http://<real address>:<any port>` (or any other
+protocol) from the plain root namespace -- no `ip netns exec` --
+reach the guest directly. It also means any other sandbox on `sri0`
+can reach this one the same way, which is already true by the
+bridge's own full-mesh design (see "Non-goals" above). It does
+*not* make the sandbox reachable from outside the host -- that would
+need the equivalent rule at the *outer* NAT boundary (`ensureNAT`,
+root namespace) too, which this design deliberately leaves out: this
+rule's whole point is host (and sibling-sandbox) reachability, not
+public exposure.
 
 [network-setup.md]: https://github.com/firecracker-microvm/firecracker/blob/main/docs/network-setup.md
 
