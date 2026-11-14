@@ -18,11 +18,14 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -30,6 +33,7 @@ import (
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/cleanup"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/compress"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/network"
 	obs "github.com/tardigradeproj/sandbox-runtime/pkg/observability"
 	"google.golang.org/grpc/codes"
@@ -41,7 +45,16 @@ const firecrackerSocketName = "firecracker.sock"
 // jailerSocketPath mirrors the SDK's own jail() path computation, so
 // StartSandbox can find a jailed sandbox's socket independently.
 func jailerSocketPath(fc cfg.Firecracker, sandboxID string) string {
-	return filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID, "root", firecrackerSocketName)
+	return jailerRootPath(fc, sandboxID, firecrackerSocketName)
+}
+
+// jailerRootPath is the real, host-visible path for name inside
+// sandboxID's jailer chroot (its "root/" dir) -- the same computation
+// jailerSocketPath uses for the API socket specifically, generalized
+// to any file a jailed firecracker process writes relative to its
+// own chroot root (e.g. CheckpointSandbox's mem/snapshot files).
+func jailerRootPath(fc cfg.Firecracker, sandboxID, name string) string {
+	return filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID, "root", name)
 }
 
 // CreateSandbox prepares a sandbox's on-disk state (writable overlay)
@@ -152,6 +165,7 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	}
 
 	var machine *firecracker.Machine
+	var jailerUID, jailerGID int
 	if fc.Jailer.Enabled {
 		uid, gid, err := r.resolveJailerUIDGID(fc.Jailer, sandboxID)
 		if err != nil {
@@ -212,6 +226,7 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		// host path (see jailerSocketPath).
 		machineCfg.SocketPath = firecrackerSocketName
 		socketPath = jailerSocketPath(fc, sandboxID)
+		jailerUID, jailerGID = uid, gid
 
 		machine, err = firecracker.NewMachine(ctx, machineCfg)
 		if err != nil {
@@ -253,6 +268,17 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	}
 
 	cu.Release()
+
+	// Best-effort: CheckpointSandbox needs this later, but the
+	// sandbox itself is already up and running without it.
+	if err := writeSandboxDescriptor(sandboxDir, sandboxDescriptor{
+		Config: config,
+		UID:    jailerUID,
+		GID:    jailerGID,
+	}); err != nil {
+		log.WithError(err).Warn("create sandbox: failed to write sandbox descriptor")
+	}
+
 	log.WithFields(logrus.Fields{
 		obs.RootfsPath:  rootfsPath,
 		obs.OverlayPath: overlayPath,
@@ -334,4 +360,185 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 
 	log.Info("sandbox started")
 	return &v1.StartSandboxResponse{}, nil
+}
+
+// StopSandbox pauses a running sandbox's vCPUs over its API socket,
+// the same reconnect-by-socket pattern as StartSandbox.
+func (r *Runtime) StopSandbox(ctx context.Context, req *v1.StopSandboxRequest) (*v1.StopSandboxResponse, error) {
+	sandboxID := req.GetSandboxId()
+	if sandboxID == "" {
+		return nil, status.Error(codes.InvalidArgument, "sandbox_id must be set")
+	}
+	log := logrus.WithField(obs.SandboxID, sandboxID)
+	log.Info("stopping sandbox")
+
+	fc := r.cfg.Runtime.Firecracker
+	socketPath := filepath.Join(r.cfg.State, sandboxID, firecrackerSocketName)
+	if fc.Jailer.Enabled {
+		socketPath = jailerSocketPath(fc, sandboxID)
+	}
+	if _, err := os.Stat(socketPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "sandbox %q not found", sandboxID)
+		}
+		log.WithError(err).Error("stop sandbox: failed to stat socket")
+		return nil, status.Errorf(codes.Internal, "stop sandbox: %v", err)
+	}
+
+	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	vm := &models.VM{State: firecracker.String(models.VMStatePaused)}
+	if _, err := client.PatchVM(ctx, vm); err != nil {
+		log.WithError(err).Error("stop sandbox: failed to pause vm")
+		return nil, status.Errorf(codes.Internal, "stop sandbox: %v", err)
+	}
+
+	log.Info("sandbox stopped")
+	return &v1.StopSandboxResponse{}, nil
+}
+
+// CheckpointSandbox captures a stopped sandbox's VM state (via
+// Firecracker's own CreateSnapshot) and a compressed copy of its
+// overlay into cfg.Checkpoint.Dir, alongside a Sidecar describing
+// where it came from. Fails if the sandbox is still running, or if
+// uid is already in use.
+func (r *Runtime) CheckpointSandbox(ctx context.Context, req *v1.CheckpointSandboxRequest) (*v1.CheckpointSandboxResponse, error) {
+	sandboxID := req.GetSandboxId()
+	if sandboxID == "" {
+		return nil, status.Error(codes.InvalidArgument, "sandbox_id must be set")
+	}
+	uid := req.GetUid()
+	if uid == "" {
+		uid = sandboxID
+	}
+	log := logrus.WithField(obs.SandboxID, sandboxID)
+	log.Info("checkpointing sandbox")
+
+	fc := r.cfg.Runtime.Firecracker
+	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	socketPath := jailerSocketPath(fc, sandboxID)
+	if _, err := os.Stat(socketPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "sandbox %q not found", sandboxID)
+		}
+		log.WithError(err).Error("checkpoint sandbox: failed to stat socket")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+
+	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	info, err := client.GetInstanceInfo(ctx)
+	if err != nil {
+		log.WithError(err).Error("checkpoint sandbox: failed to get instance info")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+	state := info.GetPayload().State
+	if state == nil || *state != models.InstanceInfoStatePaused {
+		got := "unknown"
+		if state != nil {
+			got = *state
+		}
+		return nil, status.Errorf(codes.FailedPrecondition, "sandbox %q must be stopped before checkpointing (state: %s)", sandboxID, got)
+	}
+
+	dir, err := newCheckpointDir(r.cfg.Checkpoint.Dir, uid)
+	if err != nil {
+		if errors.Is(err, ErrCheckpointExists) {
+			return nil, status.Errorf(codes.AlreadyExists, "checkpoint %q already exists", uid)
+		}
+		log.WithError(err).Error("checkpoint sandbox: failed to create checkpoint dir")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+	cu := cleanup.Make(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			log.WithError(err).Warn("checkpoint sandbox: cleanup: failed to remove checkpoint dir")
+		}
+	})
+	defer cu.Clean()
+
+	// Firecracker writes these relative to its own chroot root, so
+	// they land in the jailer chroot, not dir -- moved below.
+	memPath := filepath.Join(dir, checkpointMemFile)
+	snapshotPath := filepath.Join(dir, checkpointSnapshotFile)
+
+	params := &models.SnapshotCreateParams{
+		MemFilePath:  firecracker.String(checkpointMemFile),
+		SnapshotPath: firecracker.String(checkpointSnapshotFile),
+	}
+	if _, err := client.CreateSnapshot(ctx, params); err != nil {
+		log.WithError(err).Error("checkpoint sandbox: failed to create snapshot")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+
+	if err := moveFile(jailerRootPath(fc, sandboxID, checkpointMemFile), memPath); err != nil {
+		log.WithError(err).Error("checkpoint sandbox: failed to move mem file out of chroot")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+	if err := moveFile(jailerRootPath(fc, sandboxID, checkpointSnapshotFile), snapshotPath); err != nil {
+		log.WithError(err).Error("checkpoint sandbox: failed to move snapshot file out of chroot")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+
+	compCfg := r.cfg.Checkpoint.Compression.Filesystem
+	overlayPath := filepath.Join(sandboxDir, "overlay.ext4")
+	compressedOverlayPath := filepath.Join(dir, overlayFileName(compress.Type(compCfg.Format)))
+	if err := r.fileSystemCheckpointCompression.Compress(ctx, overlayPath, compressedOverlayPath, compress.WithLevel(compCfg.Level)); err != nil {
+		log.WithError(err).Error("checkpoint sandbox: failed to compress overlay")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+
+	desc, err := readSandboxDescriptor(sandboxDir)
+	if err != nil {
+		log.WithError(err).Error("checkpoint sandbox: failed to read sandbox descriptor")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+
+	ipAddress, _, err := network.IPAddress(sandboxID)
+	if err != nil {
+		log.WithError(err).Error("checkpoint sandbox: failed to look up sandbox ip")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+
+	if err := writeSidecar(dir, Sidecar{
+		ID:        uid,
+		Name:      req.GetName(),
+		Config:    desc.Config,
+		IPAddress: ipAddress,
+		UID:       desc.UID,
+		GID:       desc.GID,
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		log.WithError(err).Error("checkpoint sandbox: failed to write sidecar")
+		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
+	}
+
+	cu.Release()
+	log.WithField(obs.CheckPointID, uid).Info("sandbox checkpointed")
+	return &v1.CheckpointSandboxResponse{CheckpointRef: uid}, nil
+}
+
+// moveFile copies src to dst then removes src -- a cross-filesystem-
+// safe rename, since a jailed checkpoint's mem/snapshot files start
+// out inside the jailer chroot, which may not share a filesystem with
+// cfg.Checkpoint.Dir.
+func moveFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", src, err)
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", dst, err)
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return fmt.Errorf("copy %s -> %s: %w", src, dst, err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", dst, err)
+	}
+	if err := in.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", src, err)
+	}
+	return os.Remove(src)
 }

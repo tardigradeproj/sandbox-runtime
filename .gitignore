@@ -27,6 +27,8 @@ go.work.sum
 net.md
 # env file
 .env
+issue.md
+issue2.md
 
 # Editor/IDE
 # .idea/

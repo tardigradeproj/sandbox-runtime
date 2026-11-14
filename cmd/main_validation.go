@@ -173,6 +173,106 @@ func newValidateStartSandboxCmd() *cobra.Command {
 	return cmd
 }
 
+// newValidateStopSandboxCmd is a temporary manual-testing command for
+// exercising StopSandbox directly from the CLI. The sandbox must
+// already be running (see validate-start-sandbox), e.g.:
+//
+//	go run ./cmd validate-stop-sandbox test-1
+func newValidateStopSandboxCmd() *cobra.Command {
+	var configPath string
+
+	cmd := &cobra.Command{
+		Use:   "validate-stop-sandbox <sandbox-id>",
+		Short: "temporary: stop (pause) a sandbox and print the result",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sandboxID := args[0]
+
+			c, err := cfg.Load(configPath)
+			if err != nil {
+				return err
+			}
+
+			st, err := store.New(c.Rootfs.Dir)
+			if err != nil {
+				return err
+			}
+
+			rt, err := runtime.NewRuntime(c, st)
+			if err != nil {
+				return err
+			}
+
+			if _, err := rt.StopSandbox(context.Background(), &v1.StopSandboxRequest{SandboxId: sandboxID}); err != nil {
+				return err
+			}
+
+			fmt.Printf("stopped sandbox %s\n", sandboxID)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
+
+	return cmd
+}
+
+// newValidateCheckpointSandboxCmd is a temporary manual-testing
+// command for exercising CheckpointSandbox directly from the CLI.
+// The sandbox must already be stopped (see validate-stop-sandbox),
+// e.g.:
+//
+//	go run ./cmd validate-checkpoint-sandbox test-1
+func newValidateCheckpointSandboxCmd() *cobra.Command {
+	var (
+		configPath string
+		uid        string
+		name       string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "validate-checkpoint-sandbox <sandbox-id>",
+		Short: "temporary: checkpoint a stopped sandbox and print the result",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sandboxID := args[0]
+
+			c, err := cfg.Load(configPath)
+			if err != nil {
+				return err
+			}
+
+			st, err := store.New(c.Rootfs.Dir)
+			if err != nil {
+				return err
+			}
+
+			rt, err := runtime.NewRuntime(c, st)
+			if err != nil {
+				return err
+			}
+
+			resp, err := rt.CheckpointSandbox(context.Background(), &v1.CheckpointSandboxRequest{
+				SandboxId: sandboxID,
+				Uid:       uid,
+				Name:      name,
+			})
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("checkpointed sandbox %s\n  checkpoint_ref: %s\n", sandboxID, resp.GetCheckpointRef())
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
+	cmd.Flags().StringVar(&uid, "uid", "", "checkpoint uid (defaults to the sandbox id)")
+	cmd.Flags().StringVar(&name, "name", "", "optional human label for the checkpoint")
+
+	return cmd
+}
+
 // newValidateRunSandboxCmd is a temporary manual-testing command that
 // creates and starts a sandbox, then blocks until interrupted, all
 // within a single process. validate-create-sandbox and
@@ -267,9 +367,9 @@ func newValidateRunSandboxCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
-	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-21", "sandbox uid")
+	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-27", "sandbox uid")
 	cmd.Flags().Float64Var(&cpu, "cpu", 1, "vCPU count")
-	cmd.Flags().Int64Var(&memoryMib, "memory-mib", 128, "memory size, in MiB")
+	cmd.Flags().Int64Var(&memoryMib, "memory-mib", 512, "memory size, in MiB")
 	cmd.Flags().Int64Var(&storageMib, "storage-mib", 256, "overlay size, in MiB")
 
 	return cmd

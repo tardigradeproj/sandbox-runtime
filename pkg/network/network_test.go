@@ -101,6 +101,17 @@ func TestAttachDetach(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(natOut), testGuest.GuestIP)
 
+	// The sandbox's real address must be DNATed to the guest, on any
+	// port/protocol, so it's reachable from the host without needing
+	// ip netns exec.
+	dnatOut, err := exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "iptables", "-t", "nat", "-S", "PREROUTING").CombinedOutput()
+	require.NoError(t, err)
+	assert.Contains(t, string(dnatOut), "-d "+a.IPAddress[:strings.Index(a.IPAddress, "/")]+"/32")
+	assert.Contains(t, string(dnatOut), "--to-destination "+testGuest.GuestIP)
+	fwdOut, err := exec.CommandContext(ctx, "ip", "netns", "exec", sandboxID, "iptables", "-S", "FORWARD").CombinedOutput()
+	require.NoError(t, err)
+	assert.Contains(t, string(fwdOut), "-d "+testGuest.GuestIP+"/32 -j ACCEPT")
+
 	// The host-side veth end must be enslaved to the bridge.
 	out, err := exec.CommandContext(ctx, "ip", "-d", "link", "show", vethHostName(sandboxID)).CombinedOutput()
 	require.NoError(t, err)

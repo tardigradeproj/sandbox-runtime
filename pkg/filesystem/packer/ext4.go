@@ -35,10 +35,7 @@ const (
 	defaultMinSizeBytes = 64 << 20 // 64 MiB
 	// inodeHeadroom is added on top of the measured entry count to
 	// cover ext4's own reserved inodes (root, lost+found, journal,
-	// etc.). 16 undercounted in practice (a real Ubuntu rootfs with a
-	// few extra packages failed mkfs.ext4 with "Could not allocate
-	// inode"), so this carries real margin rather than the bare
-	// minimum.
+	// etc.).
 	inodeHeadroom = 64
 )
 

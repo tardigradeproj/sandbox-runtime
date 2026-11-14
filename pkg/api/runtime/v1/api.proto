@@ -23,6 +23,17 @@ option go_package = "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v
 service RuntimeService {
   rpc CreateSandbox(CreateSandboxRequest) returns (CreateSandboxResponse) {}
   rpc StartSandbox(StartSandboxRequest) returns (StartSandboxResponse) {}
+
+  // StopSandbox pauses a running sandbox's vCPUs. The process keeps
+  // running and its memory/CPU allocation is not released. Idempotent:
+  // stopping an already-stopped sandbox succeeds. See ResumeSandbox to
+  // undo it.
+  rpc StopSandbox(StopSandboxRequest) returns (StopSandboxResponse) {}
+
+  // CheckpointSandbox captures a stopped sandbox's VM state to disk,
+  // so CreateSandbox can later resume a new sandbox from it. Requires
+  // the sandbox to already be stopped; fails if it's still running.
+  rpc CheckpointSandbox(CheckpointSandboxRequest) returns (CheckpointSandboxResponse) {}
 }
 
 // RootFSService defines the public APIs for managing sandbox root
@@ -255,3 +266,27 @@ message StartSandboxRequest {
 }
 
 message StartSandboxResponse {}
+
+message StopSandboxRequest {
+  string sandbox_id = 1;
+}
+
+message StopSandboxResponse {}
+
+message CheckpointSandboxRequest {
+  string sandbox_id = 1;
+
+  // Uid is this checkpoint's own id, used as its storage key and
+  // returned as checkpoint_ref. Defaults to sandbox_id when empty.
+  // Fails if a checkpoint with this id already exists.
+  string uid = 2;
+
+  // Name is an optional human label. Need not be unique.
+  string name = 3;
+}
+
+message CheckpointSandboxResponse {
+  // CheckpointRef identifies the checkpoint for a later CreateSandbox
+  // call -- the same role RootfsRef plays for PullRootFS.
+  string checkpoint_ref = 1;
+}

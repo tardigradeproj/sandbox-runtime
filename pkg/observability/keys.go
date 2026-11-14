@@ -18,4 +18,6 @@ const (
 	ConfigVersion     = "config.version"
 	GRPCListenAddress = "grpc.listen_address"
 	FirecrackerBin    = "firecracker.bin"
+
+	CheckPointID = "checkpoint.id"
 )
