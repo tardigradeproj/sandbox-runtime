@@ -40,6 +40,9 @@ const (
 	TapDeviceName = "tap0"
 	// IfaceID identifies the guest NIC in Firecracker's own API.
 	IfaceID = "net0"
+	// vethNSName is the in-namespace end of every sandbox's veth
+	// pair, carrying its real, per-sandbox address.
+	vethNSName = "veth-ns"
 )
 
 // GuestNetwork is the fixed point-to-point pair every sandbox's tap
@@ -241,16 +244,15 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 	defer nsLink.Delete()
 
 	vethHost := vethHostName(sandboxID)
-	const vethNS = "veth-ns"
 
 	// ip link add <vethHost> type veth peer name veth-ns
-	veth := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: vethHost}, PeerName: vethNS}
+	veth := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: vethHost}, PeerName: vethNSName}
 	if err := netlink.LinkAdd(veth); err != nil {
 		return Attachment{}, fmt.Errorf("network: add veth pair: %w", err)
 	}
 
 	// ip link set veth-ns netns <sandboxID>
-	peer, err := netlink.LinkByName(vethNS)
+	peer, err := netlink.LinkByName(vethNSName)
 	if err != nil {
 		return Attachment{}, fmt.Errorf("network: find veth peer: %w", err)
 	}
@@ -273,7 +275,7 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 	}
 
 	// ip netns exec <sandboxID> ip addr add <ip>/<prefixLen> dev veth-ns
-	nsVeth, err := nsLink.LinkByName(vethNS)
+	nsVeth, err := nsLink.LinkByName(vethNSName)
 	if err != nil {
 		return Attachment{}, fmt.Errorf("network: find veth peer in namespace: %w", err)
 	}
@@ -312,11 +314,11 @@ func (n *Network) Attach(ctx context.Context, sandboxID string) (Attachment, err
 			return fmt.Errorf("enable ip_forward: %w", err)
 		}
 		// ip netns exec <sandboxID> iptables -t nat -A POSTROUTING -s 169.254.100.2 -o veth-ns -j MASQUERADE
-		if err := run(ctx, "iptables", "-t", "nat", "-A", "POSTROUTING", "-s", n.guest.GuestIP, "-o", vethNS, "-j", "MASQUERADE"); err != nil {
+		if err := run(ctx, "iptables", "-t", "nat", "-A", "POSTROUTING", "-s", n.guest.GuestIP, "-o", vethNSName, "-j", "MASQUERADE"); err != nil {
 			return fmt.Errorf("add guest masquerade rule: %w", err)
 		}
 		// ip netns exec <sandboxID> iptables -A FORWARD -i tap0 -o veth-ns -j ACCEPT
-		if err := run(ctx, "iptables", "-A", "FORWARD", "-i", TapDeviceName, "-o", vethNS, "-j", "ACCEPT"); err != nil {
+		if err := run(ctx, "iptables", "-A", "FORWARD", "-i", TapDeviceName, "-o", vethNSName, "-j", "ACCEPT"); err != nil {
 			return fmt.Errorf("add forward accept rule: %w", err)
 		}
 		// ip netns exec <sandboxID> iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
@@ -383,6 +385,42 @@ func (n *Network) Detach(_ context.Context, sandboxID string) error {
 	// ip netns delete <sandboxID> (takes tap0 down with it)
 	_ = deleteNetns(sandboxID)
 	return n.ips.Release(sandboxID)
+}
+
+// IPAddress returns the CIDR-form address (e.g. "10.200.5.14/24")
+// currently assigned to sandboxID's veth-ns interface.
+func IPAddress(sandboxID string) (string, bool, error) {
+	nsHandle, err := netns.GetFromName(sandboxID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("network: open namespace: %w", err)
+	}
+	defer nsHandle.Close()
+
+	h, err := netlink.NewHandleAt(nsHandle)
+	if err != nil {
+		return "", false, fmt.Errorf("network: open netlink handle: %w", err)
+	}
+	defer h.Delete()
+
+	link, err := h.LinkByName(vethNSName)
+	if err != nil {
+		if _, ok := err.(netlink.LinkNotFoundError); ok {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("network: find veth peer: %w", err)
+	}
+
+	addrs, err := h.AddrList(link, netlink.FAMILY_V4)
+	if err != nil {
+		return "", false, fmt.Errorf("network: list addresses: %w", err)
+	}
+	if len(addrs) == 0 {
+		return "", false, nil
+	}
+	return addrs[0].IPNet.String(), true, nil
 }
 
 // vethHostName derives a short interface name from sandboxID (Linux

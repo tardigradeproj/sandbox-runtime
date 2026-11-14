@@ -68,16 +68,20 @@ type Checkpoint struct {
 	// Dir is the directory under which sandbox checkpoints are
 	// persisted.
 	Dir string `toml:"dir" default:"/var/lib/sandbox-runtime/checkpoints"`
-	// Compression configures how the sandbox's overlay is compressed
-	// when it's copied into the checkpoint's own storage.
+	// Compression configures how the checkpoint's pieces are
+	// compressed.
 	Compression Compression `toml:"compression"`
 }
 
-// Compression configures compressing a checkpoint's overlay copy.
-// Only the overlay needs this -- it's a large, mostly-sparse ext4
-// image; the memory/snapshot-state files Firecracker itself produces
-// to the same checkpoint aren't sparse the same way.
+// Compression configures compressing a checkpoint's pieces.
 type Compression struct {
+	// Filesystem configures compressing the sandbox's overlay.
+	Filesystem FilesystemCompression `toml:"filesystem"`
+}
+
+// FilesystemCompression configures compressing a checkpoint's
+// overlay copy.
+type FilesystemCompression struct {
 	// Format is "zstd", "gzip", or "none".
 	Format string `toml:"format" default:"zstd"`
 	// Level's valid range depends on Format (zstd: 1-19 or 1-22 with

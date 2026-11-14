@@ -162,12 +162,14 @@ cidr = "10.200.5.0/24"
 	}, cfg.Rootfs)
 
 	checkpointType := reflect.TypeOf(Checkpoint{})
-	compressionType := reflect.TypeOf(Compression{})
+	fsCompressionType := reflect.TypeOf(FilesystemCompression{})
 	assert.Equal(t, Checkpoint{
 		Dir: defaultTag(t, checkpointType, "Dir"),
 		Compression: Compression{
-			Format: defaultTag(t, compressionType, "Format"),
-			Level:  defaultIntTag(t, compressionType, "Level"),
+			Filesystem: FilesystemCompression{
+				Format: defaultTag(t, fsCompressionType, "Format"),
+				Level:  defaultIntTag(t, fsCompressionType, "Level"),
+			},
 		},
 	}, cfg.Checkpoint)
 	assert.Equal(t, defaultTag(t, configType, "State"), cfg.State)
@@ -468,10 +470,12 @@ cidr = "10.200.5.0/24"
 	cfg, err := Load(path)
 	require.NoError(t, err)
 
-	compressionType := reflect.TypeOf(Compression{})
+	fsCompressionType := reflect.TypeOf(FilesystemCompression{})
 	assert.Equal(t, Compression{
-		Format: defaultTag(t, compressionType, "Format"),
-		Level:  defaultIntTag(t, compressionType, "Level"),
+		Filesystem: FilesystemCompression{
+			Format: defaultTag(t, fsCompressionType, "Format"),
+			Level:  defaultIntTag(t, fsCompressionType, "Level"),
+		},
 	}, cfg.Checkpoint.Compression)
 }
 
@@ -483,7 +487,7 @@ cidr = "10.200.5.0/24"
 [checkpoint]
 dir = "/data/checkpoints"
 
-[checkpoint.compression]
+[checkpoint.compression.filesystem]
 format = "gzip"
 level  = 6
 `)
@@ -491,8 +495,10 @@ level  = 6
 	require.NoError(t, err)
 	assert.Equal(t, "/data/checkpoints", cfg.Checkpoint.Dir)
 	assert.Equal(t, Compression{
-		Format: "gzip",
-		Level:  6,
+		Filesystem: FilesystemCompression{
+			Format: "gzip",
+			Level:  6,
+		},
 	}, cfg.Checkpoint.Compression)
 }
 

@@ -275,6 +275,14 @@ message StopSandboxResponse {}
 
 message CheckpointSandboxRequest {
   string sandbox_id = 1;
+
+  // Uid is this checkpoint's own id, used as its storage key and
+  // returned as checkpoint_ref. Defaults to sandbox_id when empty.
+  // Fails if a checkpoint with this id already exists.
+  string uid = 2;
+
+  // Name is an optional human label. Need not be unique.
+  string name = 3;
 }
 
 message CheckpointSandboxResponse {

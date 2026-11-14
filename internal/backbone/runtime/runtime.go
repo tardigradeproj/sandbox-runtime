@@ -24,6 +24,7 @@ import (
 
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
+	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/compress"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/idalloc"
 )
@@ -40,11 +41,19 @@ type Runtime struct {
 	store *store.Store
 	// jailerIDs is set when jailer's uid_gid.mode is "on_demand".
 	jailerIDs *idalloc.Allocator
+	// fileSystemCheckpointCompression compresses a checkpoint's
+	// overlay copy (see CheckpointSandbox), built once from
+	// cfg.Checkpoint.Compression.Filesystem.Format.
+	fileSystemCheckpointCompression compress.Compressor
 }
 
 // NewRuntime constructs a Runtime.
 func NewRuntime(cfg *cfg.Settings, store *store.Store) (*Runtime, error) {
-	r := &Runtime{cfg: cfg, store: store}
+	comp, err := compress.New(compress.Type(cfg.Checkpoint.Compression.Filesystem.Format))
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct checkpoint compressor: %w", err)
+	}
+	r := &Runtime{cfg: cfg, store: store, fileSystemCheckpointCompression: comp}
 
 	j := cfg.Runtime.Firecracker.Jailer
 	if j.Enabled {

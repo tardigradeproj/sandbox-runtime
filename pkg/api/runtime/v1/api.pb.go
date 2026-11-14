@@ -1393,8 +1393,14 @@ func (*StopSandboxResponse) Descriptor() ([]byte, []int) {
 }
 
 type CheckpointSandboxRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	// Uid is this checkpoint's own id, used as its storage key and
+	// returned as checkpoint_ref. Defaults to sandbox_id when empty.
+	// Fails if a checkpoint with this id already exists.
+	Uid string `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid,omitempty"`
+	// Name is an optional human label. Need not be unique.
+	Name          string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1432,6 +1438,20 @@ func (*CheckpointSandboxRequest) Descriptor() ([]byte, []int) {
 func (x *CheckpointSandboxRequest) GetSandboxId() string {
 	if x != nil {
 		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *CheckpointSandboxRequest) GetUid() string {
+	if x != nil {
+		return x.Uid
+	}
+	return ""
+}
+
+func (x *CheckpointSandboxRequest) GetName() string {
+	if x != nil {
+		return x.Name
 	}
 	return ""
 }
@@ -1584,10 +1604,12 @@ const file_pkg_api_runtime_v1_api_proto_rawDesc = "" +
 	"\x12StopSandboxRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\x15\n" +
-	"\x13StopSandboxResponse\"9\n" +
+	"\x13StopSandboxResponse\"_\n" +
 	"\x18CheckpointSandboxRequest\x12\x1d\n" +
 	"\n" +
-	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"B\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x10\n" +
+	"\x03uid\x18\x02 \x01(\tR\x03uid\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\"B\n" +
 	"\x19CheckpointSandboxResponse\x12%\n" +
 	"\x0echeckpoint_ref\x18\x01 \x01(\tR\rcheckpointRef2\xf3\x02\n" +
 	"\x0eRuntimeService\x12V\n" +

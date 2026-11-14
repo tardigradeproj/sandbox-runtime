@@ -108,24 +108,47 @@ func (a *ipAllocator) Allocate(sandboxID string) (net.IP, error) {
 // Release returns sandboxID's address to the pool. Releasing a
 // sandbox that holds nothing is not an error.
 func (a *ipAllocator) Release(sandboxID string) error {
+	name, ok, err := a.findBySandboxID(sandboxID)
+	if err != nil || !ok {
+		return err
+	}
+	if err := os.Remove(filepath.Join(a.dir, name)); err != nil {
+		return fmt.Errorf("ipalloc: release %s: %w", sandboxID, err)
+	}
+	return nil
+}
+
+// Lookup returns the address allocated to sandboxID, and whether it
+// holds one at all.
+func (a *ipAllocator) Lookup(sandboxID string) (net.IP, bool, error) {
+	name, ok, err := a.findBySandboxID(sandboxID)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	ip := net.ParseIP(name)
+	if ip == nil {
+		return nil, false, fmt.Errorf("ipalloc: marker filename %q is not an address", name)
+	}
+	return ip, true, nil
+}
+
+// findBySandboxID scans the marker directory (filename the address,
+// content the owning sandbox ID) for sandboxID's entry.
+func (a *ipAllocator) findBySandboxID(sandboxID string) (string, bool, error) {
 	entries, err := os.ReadDir(a.dir)
 	if err != nil {
-		return fmt.Errorf("ipalloc: read %s: %w", a.dir, err)
+		return "", false, fmt.Errorf("ipalloc: read %s: %w", a.dir, err)
 	}
 	for _, e := range entries {
 		data, err := os.ReadFile(filepath.Join(a.dir, e.Name()))
 		if err != nil {
 			continue
 		}
-		if strings.TrimSpace(string(data)) != sandboxID {
-			continue
+		if strings.TrimSpace(string(data)) == sandboxID {
+			return e.Name(), true, nil
 		}
-		if err := os.Remove(filepath.Join(a.dir, e.Name())); err != nil {
-			return fmt.Errorf("ipalloc: release %s: %w", sandboxID, err)
-		}
-		return nil
 	}
-	return nil
+	return "", false, nil
 }
 
 func (a *ipAllocator) markerPath(offset uint32) string {

@@ -9,7 +9,7 @@ type = "ext4"
 
 [checkpoint]
 dir = "/var/lib/sandbox-runtime/checkpoints"
-[checkpoint.compression]
+[checkpoint.compression.filesystem]
 format = "zstd"
 level  = 3
 

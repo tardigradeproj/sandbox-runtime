@@ -49,3 +49,10 @@ func TestStopSandboxUnimplementedOffLinux(t *testing.T) {
 	_, err = r.StopSandbox(context.Background(), &v1.StopSandboxRequest{})
 	assert.Equal(t, codes.Unimplemented, status.Code(err))
 }
+
+func TestCheckpointSandboxUnimplementedOffLinux(t *testing.T) {
+	r, err := NewRuntime(&cfg.Settings{State: t.TempDir()}, nil)
+	require.NoError(t, err)
+	_, err = r.CheckpointSandbox(context.Background(), &v1.CheckpointSandboxRequest{})
+	assert.Equal(t, codes.Unimplemented, status.Code(err))
+}
