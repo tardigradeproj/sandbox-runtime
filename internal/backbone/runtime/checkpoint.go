@@ -24,6 +24,7 @@ import (
 
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/compress"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // descriptorFile holds a sandbox's config and jailer identity --
@@ -54,6 +55,46 @@ type Sidecar struct {
 	UID       int
 	GID       int
 	CreatedAt time.Time
+}
+
+// sidecarJSON mirrors Sidecar but with Config as raw protojson --
+// plain encoding/json can't unmarshal into Config's oneof boot_source
+// (an unexported interface type), so MarshalJSON/UnmarshalJSON route
+// Config through protojson instead.
+type sidecarJSON struct {
+	ID        string
+	Name      string
+	Config    json.RawMessage
+	IPAddress string
+	UID       int
+	GID       int
+	CreatedAt time.Time
+}
+
+func (s Sidecar) MarshalJSON() ([]byte, error) {
+	cfg, err := protojson.Marshal(s.Config)
+	if err != nil {
+		return nil, fmt.Errorf("checkpoint: marshal sidecar config: %w", err)
+	}
+	return json.Marshal(sidecarJSON{
+		ID: s.ID, Name: s.Name, Config: cfg, IPAddress: s.IPAddress,
+		UID: s.UID, GID: s.GID, CreatedAt: s.CreatedAt,
+	})
+}
+
+func (s *Sidecar) UnmarshalJSON(data []byte) error {
+	var j sidecarJSON
+	if err := json.Unmarshal(data, &j); err != nil {
+		return err
+	}
+	s.ID, s.Name, s.IPAddress, s.UID, s.GID, s.CreatedAt = j.ID, j.Name, j.IPAddress, j.UID, j.GID, j.CreatedAt
+	if len(j.Config) > 0 {
+		s.Config = &v1.SandboxConfig{}
+		if err := protojson.Unmarshal(j.Config, s.Config); err != nil {
+			return fmt.Errorf("checkpoint: unmarshal sidecar config: %w", err)
+		}
+	}
+	return nil
 }
 
 // checkpointDir does not create anything -- see newCheckpointDir.
@@ -113,6 +154,37 @@ type sandboxDescriptor struct {
 	GID    int
 }
 
+// sandboxDescriptorJSON mirrors sandboxDescriptor but with Config as
+// raw protojson -- see sidecarJSON for why.
+type sandboxDescriptorJSON struct {
+	Config json.RawMessage
+	UID    int
+	GID    int
+}
+
+func (d sandboxDescriptor) MarshalJSON() ([]byte, error) {
+	cfg, err := protojson.Marshal(d.Config)
+	if err != nil {
+		return nil, fmt.Errorf("checkpoint: marshal descriptor config: %w", err)
+	}
+	return json.Marshal(sandboxDescriptorJSON{Config: cfg, UID: d.UID, GID: d.GID})
+}
+
+func (d *sandboxDescriptor) UnmarshalJSON(data []byte) error {
+	var j sandboxDescriptorJSON
+	if err := json.Unmarshal(data, &j); err != nil {
+		return err
+	}
+	d.UID, d.GID = j.UID, j.GID
+	if len(j.Config) > 0 {
+		d.Config = &v1.SandboxConfig{}
+		if err := protojson.Unmarshal(j.Config, d.Config); err != nil {
+			return fmt.Errorf("checkpoint: unmarshal descriptor config: %w", err)
+		}
+	}
+	return nil
+}
+
 func writeSandboxDescriptor(sandboxDir string, d sandboxDescriptor) error {
 	data, err := json.Marshal(d)
 	if err != nil {
@@ -147,4 +219,19 @@ func overlayFileName(format compress.Type) string {
 	default:
 		return "overlay.ext4"
 	}
+}
+
+// findOverlay returns dir's overlay file and the compressor that
+// reverses it, independent of the current cfg.Checkpoint.Compression
+// setting -- a checkpoint must decompress with whatever format it was
+// actually written with.
+func findOverlay(dir string) (path string, comp compress.Compressor, err error) {
+	for _, format := range []compress.Type{compress.TypeZstd, compress.TypeGzip, compress.TypeNone} {
+		p := filepath.Join(dir, overlayFileName(format))
+		if _, err := os.Stat(p); err == nil {
+			c, err := compress.New(format)
+			return p, c, err
+		}
+	}
+	return "", nil, fmt.Errorf("checkpoint: no overlay file found in %s", dir)
 }

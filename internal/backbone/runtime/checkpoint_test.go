@@ -48,8 +48,8 @@ func TestSidecarRoundTrip(t *testing.T) {
 		ID:   "chk-1",
 		Name: "nightly build",
 		Config: &v1.SandboxConfig{
-			Metadata: &v1.SandboxMetadata{Uid: "sandbox-1", Name: "sandbox"},
-			Rootfs:   &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "alpine:3.19"}, IsRootDevice: true},
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1", Name: "sandbox"},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "alpine:3.19"}, IsRootDevice: true}},
 			Resources: &v1.SandboxResources{
 				Cpu:          1,
 				MemoryBytes:  512 << 20,

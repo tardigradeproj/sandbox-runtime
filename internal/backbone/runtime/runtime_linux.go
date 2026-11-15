@@ -57,11 +57,43 @@ func jailerRootPath(fc cfg.Firecracker, sandboxID, name string) string {
 	return filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID, "root", name)
 }
 
+// spawnSandbox registers a cu callback to stop the VMM if anything
+// later fails, then runs machine's FcInit handler list -- the same
+// work machine.Start does, minus the final InstanceStart action,
+// common to both a fresh boot and a snapshot load.
+func spawnSandbox(ctx context.Context, log *logrus.Entry, cu *cleanup.Cleanup, machine *firecracker.Machine, socketPath string) error {
+	cu.Add(func() {
+		if err := machine.StopVMM(); err != nil {
+			log.WithError(err).Warn("create sandbox: cleanup: failed to stop vmm")
+		}
+	})
+
+	log.WithField(obs.SocketPath, socketPath).Debug("create sandbox: spawning firecracker process")
+	if err := machine.Handlers.Run(ctx, machine); err != nil {
+		log.WithError(err).Error("create sandbox: failed to spawn/configure firecracker")
+		return err
+	}
+	return nil
+}
+
+// writeSandboxDescriptorBestEffort writes d, logging rather than
+// failing the caller's RPC on error: CheckpointSandbox needs this
+// later, but the sandbox itself is already up and running without it.
+func writeSandboxDescriptorBestEffort(log *logrus.Entry, sandboxDir string, d sandboxDescriptor) {
+	if err := writeSandboxDescriptor(sandboxDir, d); err != nil {
+		log.WithError(err).Warn("create sandbox: failed to write sandbox descriptor")
+	}
+}
+
 // CreateSandbox prepares a sandbox's on-disk state (writable overlay)
 // and builds the Firecracker microVM configuration for it, without
 // booting the guest. The microVM is actually started by StartSandbox.
 func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxRequest) (*v1.CreateSandboxResponse, error) {
 	config := req.GetConfig()
+
+	if checkpointRef := config.GetCheckpointRef(); checkpointRef != "" {
+		return r.createSandboxFromCheckpoint(ctx, req, checkpointRef)
+	}
 
 	sandboxID := config.GetMetadata().GetUid()
 	if sandboxID == "" {
@@ -167,52 +199,13 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	var machine *firecracker.Machine
 	var jailerUID, jailerGID int
 	if fc.Jailer.Enabled {
-		uid, gid, err := r.resolveJailerUIDGID(fc.Jailer, sandboxID)
+		uid, gid, realSocketPath, err := r.jailSandbox(fc, sandboxID, overlayPath, kernelImagePath, &machineCfg, &cu)
 		if err != nil {
-			log.WithError(err).Error("create sandbox: failed to obtain jailer uid/gid")
+			log.WithError(err).Error("create sandbox: failed to jail sandbox")
 			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 		}
-
-		// Hard-linked into the chroot as-is, so the jailed uid/gid
-		// needs write access to the shared inode.
-		if err := os.Chown(overlayPath, uid, gid); err != nil {
-			log.WithError(err).Error("create sandbox: failed to chown overlay image for jailer")
-			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
-		}
-
-		// The tap device (created earlier by AttachNetwork) is owned
-		// by root; without CAP_NET_ADMIN, the jailed uid can only
-		// open it if it's also the device's recorded owner.
-		if err := network.SetTapOwner(sandboxID, uid, gid); err != nil {
-			log.WithError(err).Error("create sandbox: failed to chown tap device for jailer")
-			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
-		}
-
-		if fc.Jailer.UIDGID.Mode == "on_demand" {
-			cu.Add(func() {
-				if err := r.jailerIDs.Release(uid); err != nil {
-					log.WithError(err).Warn("create sandbox: cleanup: failed to release jailer id")
-				}
-			})
-		}
-		cu.Add(func() {
-			chrootDir := filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID)
-			if err := os.RemoveAll(chrootDir); err != nil {
-				log.WithError(err).Warn("create sandbox: cleanup: failed to remove jailer chroot dir")
-			}
-		})
-
-		// Namespace + tap device are provisioned independently, by
-		// NetworkService (see pkg/network), not by CreateSandbox --
-		// RuntimeService and NetworkService don't call each other.
-		// Both the namespace path and the tap device name are fixed
-		// conventions, not values CreateSandbox needs to look up.
-		machineCfg.NetNS = network.NetnsPath(sandboxID)
-		machineCfg.NetworkInterfaces = firecracker.NetworkInterfaces{{
-			StaticConfiguration: &firecracker.StaticNetworkConfiguration{
-				HostDevName: network.TapDeviceName,
-			},
-		}}
+		socketPath = realSocketPath
+		jailerUID, jailerGID = uid, gid
 
 		guest := network.GuestNetwork(r.cfg.Network.GuestNetwork)
 		machineCfg.KernelArgs = strings.TrimSpace(machineCfg.KernelArgs + " " + network.GuestIPKernelParam(guest))
@@ -220,13 +213,6 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		// LogFifo (not LogPath) gets hard-linked into the chroot by the SDK.
 		logPath = filepath.Join(sandboxDir, "firecracker.fifo")
 		machineCfg.LogFifo = logPath
-		machineCfg.JailerCfg = buildJailerConfig(fc, uid, gid, sandboxID, kernelImagePath)
-
-		// Chroot-relative: the SDK's jail() rewrites this to the real
-		// host path (see jailerSocketPath).
-		machineCfg.SocketPath = firecrackerSocketName
-		socketPath = jailerSocketPath(fc, sandboxID)
-		jailerUID, jailerGID = uid, gid
 
 		machine, err = firecracker.NewMachine(ctx, machineCfg)
 		if err != nil {
@@ -254,30 +240,16 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 		}
 	}
-	cu.Add(func() {
-		if err := machine.StopVMM(); err != nil {
-			log.WithError(err).Warn("create sandbox: cleanup: failed to stop vmm")
-		}
-	})
-
-	// Same as machine.Start, minus the final InstanceStart action.
-	log.WithField(obs.SocketPath, socketPath).Debug("create sandbox: spawning firecracker process")
-	if err := machine.Handlers.Run(ctx, machine); err != nil {
-		log.WithError(err).Error("create sandbox: failed to spawn/configure firecracker")
+	if err := spawnSandbox(ctx, log, &cu, machine, socketPath); err != nil {
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
-
 	cu.Release()
 
-	// Best-effort: CheckpointSandbox needs this later, but the
-	// sandbox itself is already up and running without it.
-	if err := writeSandboxDescriptor(sandboxDir, sandboxDescriptor{
+	writeSandboxDescriptorBestEffort(log, sandboxDir, sandboxDescriptor{
 		Config: config,
 		UID:    jailerUID,
 		GID:    jailerGID,
-	}); err != nil {
-		log.WithError(err).Warn("create sandbox: failed to write sandbox descriptor")
-	}
+	})
 
 	log.WithFields(logrus.Fields{
 		obs.RootfsPath:  rootfsPath,
@@ -286,6 +258,228 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		obs.LogPath:     logPath,
 	}).Info("sandbox created")
 	return &v1.CreateSandboxResponse{SandboxId: sandboxID}, nil
+}
+
+// createSandboxFromCheckpoint resumes a sandbox from a prior
+// CheckpointSandbox call under the caller's own sandbox_id, jailer
+// only: a jailed snapshot records its drive at a chroot-relative
+// path, which any sandbox's own chroot satisfies, so one checkpoint
+// can seed many concurrent sandboxes. Non-jailed records the drive's
+// real host path instead, which two sandboxes can't both own at once.
+func (r *Runtime) createSandboxFromCheckpoint(ctx context.Context, req *v1.CreateSandboxRequest, checkpointRef string) (*v1.CreateSandboxResponse, error) {
+	sandboxID := req.GetConfig().GetMetadata().GetUid()
+	if sandboxID == "" {
+		return nil, status.Error(codes.InvalidArgument, "config.metadata.uid must be set")
+	}
+	log := logrus.WithField(obs.SandboxID, sandboxID)
+	log.Info("creating sandbox from checkpoint")
+
+	fc := r.cfg.Runtime.Firecracker
+	if !fc.Jailer.Enabled {
+		return nil, status.Error(codes.FailedPrecondition, "create sandbox from checkpoint requires jailer")
+	}
+
+	dir := checkpointDir(r.cfg.Checkpoint.Dir, checkpointRef)
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "checkpoint %q not found", checkpointRef)
+		}
+		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+
+	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	if err := os.Mkdir(sandboxDir, 0o755); err != nil {
+		if os.IsExist(err) {
+			return nil, status.Errorf(codes.AlreadyExists, "sandbox %q already exists", sandboxID)
+		}
+		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+	cu := cleanup.Make(func() {
+		if err := os.RemoveAll(sandboxDir); err != nil {
+			log.WithError(err).Warn("create sandbox: cleanup: failed to remove sandbox dir")
+		}
+	})
+	defer cu.Clean()
+
+	// Firecracker's snapshot device state has two drives recorded,
+	// not just the overlay: a sandbox also boots with a root rootfs
+	// image attached (see CreateSandbox's WithRootDrive), hard-linked
+	// into its chroot at snapshot time the same way the overlay is --
+	// so restoring needs to put it back too, under the same basename.
+	sidecar, err := readSidecar(dir)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+	image := sidecar.Config.GetRootfs().GetSpec().GetImage()
+	entry, ok, err := r.store.Resolve(image)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "rootfs %q not found", image)
+	}
+	rootfsPath, err := r.store.ImagePath(entry.Digest)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+
+	overlayFile, comp, err := findOverlay(dir)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+	overlayPath := filepath.Join(sandboxDir, "overlay.ext4")
+	if err := comp.Decompress(ctx, overlayFile, overlayPath); err != nil {
+		return nil, status.Errorf(codes.Internal, "create sandbox: failed to decompress overlay: %v", err)
+	}
+
+	memFilePath := filepath.Join(dir, checkpointMemFile)
+	snapshotPath := filepath.Join(dir, checkpointSnapshotFile)
+	logPath := filepath.Join(sandboxDir, "firecracker.fifo")
+
+	machineCfg := firecracker.Config{
+		VMID:     sandboxID,
+		LogLevel: fc.Log.Level,
+		LogFifo:  logPath,
+	}
+	uid, gid, socketPath, err := r.jailSandbox(fc, sandboxID, overlayPath, "", &machineCfg, &cu)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+
+	machine, err := firecracker.NewMachine(ctx, machineCfg, firecracker.WithSnapshot(memFilePath, snapshotPath))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create sandbox: failed to build firecracker machine config: %v", err)
+	}
+	// WithSnapshot replaces the jailed FcInit list wholesale, which
+	// drops NaiveChrootStrategy's own LinkFilesHandler -- so the
+	// rootfs/overlay/mem/snapshot files need their own hard-link step
+	// back in, at the same point in the list LinkFilesHandler would run.
+	machine.Handlers.FcInit = machine.Handlers.FcInit.AppendAfter(
+		firecracker.CreateLogFilesHandlerName,
+		linkCheckpointFilesHandler(fc, sandboxID, uid, gid, rootfsPath, overlayPath, memFilePath, snapshotPath),
+	)
+
+	if err := spawnSandbox(ctx, log, &cu, machine, socketPath); err != nil {
+		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+	cu.Release()
+
+	writeSandboxDescriptorBestEffort(log, sandboxDir, sandboxDescriptor{
+		Config: req.GetConfig(),
+		UID:    uid,
+		GID:    gid,
+	})
+
+	log.WithFields(logrus.Fields{
+		obs.OverlayPath: overlayPath,
+		obs.SocketPath:  socketPath,
+		obs.LogPath:     logPath,
+	}).Info("sandbox created from checkpoint")
+	return &v1.CreateSandboxResponse{SandboxId: sandboxID}, nil
+}
+
+// linkCheckpointFilesHandler reproduces NaiveChrootStrategy's own
+// LinkFilesHandler, which firecracker.WithSnapshot's handler list
+// drops: without this, nothing puts the rootfs/overlay/mem/snapshot/
+// fifo files into sandboxID's chroot before Firecracker -- now
+// running inside it -- tries to open them. rootfsPath is read-only
+// and content-addressed, so unlike the others it isn't chowned.
+func linkCheckpointFilesHandler(fc cfg.Firecracker, sandboxID string, uid, gid int, rootfsPath, overlayPath, memFilePath, snapshotPath string) firecracker.Handler {
+	return firecracker.Handler{
+		Name: "checkpoint.LinkFiles",
+		Fn: func(_ context.Context, m *firecracker.Machine) error {
+			root := filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID, "root")
+			if err := os.Link(rootfsPath, filepath.Join(root, filepath.Base(rootfsPath))); err != nil {
+				return fmt.Errorf("link rootfs: %w", err)
+			}
+			if err := os.Link(overlayPath, filepath.Join(root, "overlay.ext4")); err != nil {
+				return fmt.Errorf("link overlay: %w", err)
+			}
+			if err := os.Chown(memFilePath, uid, gid); err != nil {
+				return fmt.Errorf("chown mem file: %w", err)
+			}
+			if err := os.Link(memFilePath, filepath.Join(root, checkpointMemFile)); err != nil {
+				return fmt.Errorf("link mem file: %w", err)
+			}
+			if err := os.Chown(snapshotPath, uid, gid); err != nil {
+				return fmt.Errorf("chown snapshot file: %w", err)
+			}
+			if err := os.Link(snapshotPath, filepath.Join(root, checkpointSnapshotFile)); err != nil {
+				return fmt.Errorf("link snapshot file: %w", err)
+			}
+			m.Cfg.Snapshot.MemFilePath = checkpointMemFile
+			m.Cfg.Snapshot.SnapshotPath = checkpointSnapshotFile
+
+			for _, fifoPath := range []*string{&m.Cfg.LogFifo, &m.Cfg.MetricsFifo} {
+				if *fifoPath == "" {
+					continue
+				}
+				name := filepath.Base(*fifoPath)
+				dst := filepath.Join(root, name)
+				if err := os.Link(*fifoPath, dst); err != nil {
+					return fmt.Errorf("link fifo %s: %w", name, err)
+				}
+				if err := os.Chown(dst, uid, gid); err != nil {
+					return fmt.Errorf("chown fifo %s: %w", name, err)
+				}
+				*fifoPath = name
+			}
+			return nil
+		},
+	}
+}
+
+// jailSandbox resolves sandboxID's jailer uid/gid, grants it access
+// to the overlay and tap device, registers cu release/cleanup
+// callbacks, and fills in machineCfg's jailer fields. kernelImagePath
+// may be "" when there's no kernel to boot (a checkpoint restore).
+func (r *Runtime) jailSandbox(fc cfg.Firecracker, sandboxID, overlayPath, kernelImagePath string, machineCfg *firecracker.Config, cu *cleanup.Cleanup) (uid, gid int, socketPath string, err error) {
+	uid, gid, err = r.resolveJailerUIDGID(fc.Jailer, sandboxID)
+	if err != nil {
+		return 0, 0, "", fmt.Errorf("obtain jailer uid/gid: %w", err)
+	}
+
+	// Hard-linked into the chroot as-is, so the jailed uid/gid needs
+	// write access to the shared inode.
+	if err := os.Chown(overlayPath, uid, gid); err != nil {
+		return 0, 0, "", fmt.Errorf("chown overlay image for jailer: %w", err)
+	}
+
+	// The tap device (created earlier by AttachNetwork) is owned by
+	// root; without CAP_NET_ADMIN, the jailed uid can only open it if
+	// it's also the device's recorded owner.
+	if err := network.SetTapOwner(sandboxID, uid, gid); err != nil {
+		return 0, 0, "", fmt.Errorf("chown tap device for jailer: %w", err)
+	}
+
+	if fc.Jailer.UIDGID.Mode == "on_demand" {
+		cu.Add(func() {
+			if err := r.jailerIDs.Release(uid); err != nil {
+				logrus.WithField(obs.SandboxID, sandboxID).WithError(err).Warn("create sandbox: cleanup: failed to release jailer id")
+			}
+		})
+	}
+	cu.Add(func() {
+		chrootDir := filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID)
+		if err := os.RemoveAll(chrootDir); err != nil {
+			logrus.WithField(obs.SandboxID, sandboxID).WithError(err).Warn("create sandbox: cleanup: failed to remove jailer chroot dir")
+		}
+	})
+
+	// Namespace + tap device are provisioned independently, by
+	// NetworkService (see pkg/network)
+	machineCfg.NetNS = network.NetnsPath(sandboxID)
+	machineCfg.NetworkInterfaces = firecracker.NetworkInterfaces{{
+		StaticConfiguration: &firecracker.StaticNetworkConfiguration{
+			HostDevName: network.TapDeviceName,
+		},
+	}}
+	machineCfg.JailerCfg = buildJailerConfig(fc, uid, gid, sandboxID, kernelImagePath)
+
+	// Chroot-relative: the SDK's jail() rewrites this to the real
+	// host path (see jailerSocketPath).
+	machineCfg.SocketPath = firecrackerSocketName
+	return uid, gid, jailerSocketPath(fc, sandboxID), nil
 }
 
 // resolveJailerUIDGID returns the uid/gid to drop jailer's privileges
@@ -339,7 +533,8 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 	log.Info("starting sandbox")
 
 	fc := r.cfg.Runtime.Firecracker
-	socketPath := filepath.Join(r.cfg.State, sandboxID, firecrackerSocketName)
+	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	socketPath := filepath.Join(sandboxDir, firecrackerSocketName)
 	if fc.Jailer.Enabled {
 		socketPath = jailerSocketPath(fc, sandboxID)
 	}
@@ -351,11 +546,24 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 		return nil, status.Errorf(codes.Internal, "start sandbox: %v", err)
 	}
 
+	// A checkpoint-restored sandbox was already loaded (not booted) by
+	// CreateSandbox; starting it means resuming, not InstanceStart
+	desc, _ := readSandboxDescriptor(sandboxDir)
+	fromCheckpoint := desc.Config.GetCheckpointRef() != ""
+
 	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
-	action := models.InstanceActionInfoActionTypeInstanceStart
-	if _, err := client.CreateSyncAction(ctx, &models.InstanceActionInfo{ActionType: &action}); err != nil {
-		log.WithError(err).Error("start sandbox: failed to start instance")
-		return nil, status.Errorf(codes.Internal, "start sandbox: %v", err)
+	if fromCheckpoint {
+		vm := &models.VM{State: firecracker.String(models.VMStateResumed)}
+		if _, err := client.PatchVM(ctx, vm); err != nil {
+			log.WithError(err).Error("start sandbox: failed to resume vm")
+			return nil, status.Errorf(codes.Internal, "start sandbox: %v", err)
+		}
+	} else {
+		action := models.InstanceActionInfoActionTypeInstanceStart
+		if _, err := client.CreateSyncAction(ctx, &models.InstanceActionInfo{ActionType: &action}); err != nil {
+			log.WithError(err).Error("start sandbox: failed to start instance")
+			return nil, status.Errorf(codes.Internal, "start sandbox: %v", err)
+		}
 	}
 
 	log.Info("sandbox started")
