@@ -1058,10 +1058,13 @@ func (x *BootConfig) GetBootArgs() string {
 type SandboxConfig struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Metadata *SandboxMetadata       `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	// RootFS describes the root filesystem the sandbox should be launched
-	// with and how it is attached.
-	Rootfs *RootFSMount `protobuf:"bytes,2,opt,name=rootfs,proto3" json:"rootfs,omitempty"`
-	// Boot describes how to boot the sandbox's guest kernel.
+	// Types that are valid to be assigned to BootSource:
+	//
+	//	*SandboxConfig_Rootfs
+	//	*SandboxConfig_CheckpointRef
+	BootSource isSandboxConfig_BootSource `protobuf_oneof:"boot_source"`
+	// Boot describes how to boot the sandbox's guest kernel. Ignored
+	// when boot_source is checkpoint_ref.
 	Boot *BootConfig `protobuf:"bytes,3,opt,name=boot,proto3" json:"boot,omitempty"`
 	// Resources are the resources to reserve for the sandbox, allocated when
 	// the sandbox is run.
@@ -1109,11 +1112,29 @@ func (x *SandboxConfig) GetMetadata() *SandboxMetadata {
 	return nil
 }
 
-func (x *SandboxConfig) GetRootfs() *RootFSMount {
+func (x *SandboxConfig) GetBootSource() isSandboxConfig_BootSource {
 	if x != nil {
-		return x.Rootfs
+		return x.BootSource
 	}
 	return nil
+}
+
+func (x *SandboxConfig) GetRootfs() *RootFSMount {
+	if x != nil {
+		if x, ok := x.BootSource.(*SandboxConfig_Rootfs); ok {
+			return x.Rootfs
+		}
+	}
+	return nil
+}
+
+func (x *SandboxConfig) GetCheckpointRef() string {
+	if x != nil {
+		if x, ok := x.BootSource.(*SandboxConfig_CheckpointRef); ok {
+			return x.CheckpointRef
+		}
+	}
+	return ""
 }
 
 func (x *SandboxConfig) GetBoot() *BootConfig {
@@ -1143,6 +1164,27 @@ func (x *SandboxConfig) GetAnnotations() map[string]string {
 	}
 	return nil
 }
+
+type isSandboxConfig_BootSource interface {
+	isSandboxConfig_BootSource()
+}
+
+type SandboxConfig_Rootfs struct {
+	// RootFS describes the root filesystem the sandbox should be launched
+	// with and how it is attached.
+	Rootfs *RootFSMount `protobuf:"bytes,2,opt,name=rootfs,proto3,oneof"`
+}
+
+type SandboxConfig_CheckpointRef struct {
+	// CheckpointRef resumes the sandbox from a checkpoint instead
+	// (see RuntimeService.CheckpointSandbox) -- boot and resources
+	// below are ignored, the checkpoint already captured both.
+	CheckpointRef string `protobuf:"bytes,7,opt,name=checkpoint_ref,json=checkpointRef,proto3,oneof"`
+}
+
+func (*SandboxConfig_Rootfs) isSandboxConfig_BootSource() {}
+
+func (*SandboxConfig_CheckpointRef) isSandboxConfig_BootSource() {}
 
 type CreateSandboxRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1578,10 +1620,11 @@ const file_pkg_api_runtime_v1_api_proto_rawDesc = "" +
 	"\x11kernel_image_path\x18\x01 \x01(\tR\x0fkernelImagePath\x12\x1f\n" +
 	"\vinitrd_path\x18\x02 \x01(\tR\n" +
 	"initrdPath\x12\x1b\n" +
-	"\tboot_args\x18\x03 \x01(\tR\bbootArgs\"\xe9\x03\n" +
+	"\tboot_args\x18\x03 \x01(\tR\bbootArgs\"\xa3\x04\n" +
 	"\rSandboxConfig\x127\n" +
-	"\bmetadata\x18\x01 \x01(\v2\x1b.runtime.v1.SandboxMetadataR\bmetadata\x12/\n" +
-	"\x06rootfs\x18\x02 \x01(\v2\x17.runtime.v1.RootFSMountR\x06rootfs\x12*\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x1b.runtime.v1.SandboxMetadataR\bmetadata\x121\n" +
+	"\x06rootfs\x18\x02 \x01(\v2\x17.runtime.v1.RootFSMountH\x00R\x06rootfs\x12'\n" +
+	"\x0echeckpoint_ref\x18\a \x01(\tH\x00R\rcheckpointRef\x12*\n" +
 	"\x04boot\x18\x03 \x01(\v2\x16.runtime.v1.BootConfigR\x04boot\x12:\n" +
 	"\tresources\x18\x04 \x01(\v2\x1c.runtime.v1.SandboxResourcesR\tresources\x12=\n" +
 	"\x06labels\x18\x05 \x03(\v2%.runtime.v1.SandboxConfig.LabelsEntryR\x06labels\x12L\n" +
@@ -1591,7 +1634,8 @@ const file_pkg_api_runtime_v1_api_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a>\n" +
 	"\x10AnnotationsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"I\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
+	"\vboot_source\"I\n" +
 	"\x14CreateSandboxRequest\x121\n" +
 	"\x06config\x18\x01 \x01(\v2\x19.runtime.v1.SandboxConfigR\x06config\"6\n" +
 	"\x15CreateSandboxResponse\x12\x1d\n" +
@@ -1725,6 +1769,10 @@ func init() { file_pkg_api_runtime_v1_api_proto_init() }
 func file_pkg_api_runtime_v1_api_proto_init() {
 	if File_pkg_api_runtime_v1_api_proto != nil {
 		return
+	}
+	file_pkg_api_runtime_v1_api_proto_msgTypes[19].OneofWrappers = []any{
+		(*SandboxConfig_Rootfs)(nil),
+		(*SandboxConfig_CheckpointRef)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

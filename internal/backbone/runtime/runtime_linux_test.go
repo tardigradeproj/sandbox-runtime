@@ -281,9 +281,9 @@ func TestCreateSandboxUnknownImage(t *testing.T) {
 	r, _ := newTestRuntime(t, t.TempDir())
 	_, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 		Config: &v1.SandboxConfig{
-			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
-			Resources: &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
-			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "does-not-exist:latest"}},
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "does-not-exist:latest"}}},
 		},
 	})
 	assert.Equal(t, codes.NotFound, status.Code(err))
@@ -299,9 +299,9 @@ func TestCreateSandboxCreatesOverlayImage(t *testing.T) {
 
 	resp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 		Config: &v1.SandboxConfig{
-			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
-			Resources: &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
-			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
 		},
 	})
 	require.NoError(t, err)
@@ -335,9 +335,9 @@ func TestCreateSandboxMkfsFailureSurfacesError(t *testing.T) {
 
 	_, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 		Config: &v1.SandboxConfig{
-			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
-			Resources: &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
-			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
 		},
 	})
 	require.Error(t, err)
@@ -358,9 +358,9 @@ func TestCreateSandboxCleansUpAfterFirecrackerConfigFailure(t *testing.T) {
 
 	_, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 		Config: &v1.SandboxConfig{
-			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
-			Resources: &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
-			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
 		},
 	})
 	require.Error(t, err)
@@ -430,9 +430,9 @@ func TestCreateSandboxJailerEnabledAttemptsJailerSpawn(t *testing.T) {
 
 	_, err = r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 		Config: &v1.SandboxConfig{
-			Metadata:  &v1.SandboxMetadata{Uid: sandboxID},
-			Resources: &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
-			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+			Metadata:   &v1.SandboxMetadata{Uid: sandboxID},
+			Resources:  &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
 		},
 	})
 	require.Error(t, err)
@@ -580,9 +580,9 @@ func TestStartSandboxSuccess(t *testing.T) {
 
 	createResp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 		Config: &v1.SandboxConfig{
-			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
-			Resources: &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
-			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
 		},
 	})
 	require.NoError(t, err)
@@ -624,9 +624,9 @@ func TestStopSandboxSuccess(t *testing.T) {
 
 	createResp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 		Config: &v1.SandboxConfig{
-			Metadata:  &v1.SandboxMetadata{Uid: "sandbox-1"},
-			Resources: &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
-			Rootfs:    &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}},
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
 		},
 	})
 	require.NoError(t, err)

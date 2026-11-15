@@ -102,8 +102,8 @@ func newValidateCreateSandboxCmd() *cobra.Command {
 
 			resp, err := rt.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
 				Config: &v1.SandboxConfig{
-					Metadata: &v1.SandboxMetadata{Uid: uid},
-					Rootfs:   &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: image}, IsRootDevice: true, IsReadOnly: true},
+					Metadata:   &v1.SandboxMetadata{Uid: uid},
+					BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: image}, IsRootDevice: true, IsReadOnly: true}},
 					Resources: &v1.SandboxResources{
 						Cpu:          cpu,
 						MemoryBytes:  memoryMib << 20,
@@ -273,6 +273,85 @@ func newValidateCheckpointSandboxCmd() *cobra.Command {
 	return cmd
 }
 
+// newValidateRestoreSandboxCmd is a temporary manual-testing command
+// that creates and starts a sandbox from a checkpoint instead of a
+// rootfs image, then blocks until interrupted. Requires jailer (see
+// RuntimeService.CreateSandbox's checkpoint_ref path) and a new,
+// not-yet-used uid -- a checkpoint restore never reuses the sandbox
+// id it was taken from, so the same checkpoint can seed any number
+// of concurrently-running sandboxes, e.g.:
+//
+//	go run ./cmd validate-restore-sandbox <checkpoint-ref> --uid test-restore-1
+func newValidateRestoreSandboxCmd() *cobra.Command {
+	var (
+		configPath string
+		uid        string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "validate-restore-sandbox <checkpoint-ref>",
+		Short: "temporary: create and start a sandbox from a checkpoint, then hold it open until interrupted",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			checkpointRef := args[0]
+
+			c, err := cfg.Load(configPath)
+			if err != nil {
+				return err
+			}
+
+			st, err := store.New(c.Rootfs.Dir)
+			if err != nil {
+				return err
+			}
+
+			rt, err := runtime.NewRuntime(c, st)
+			if err != nil {
+				return err
+			}
+
+			ctx := context.Background()
+
+			nsvc, err := network.New(c)
+			if err != nil {
+				return err
+			}
+			att, err := nsvc.AttachNetwork(ctx, &v1.AttachNetworkRequest{SandboxId: uid})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("attached network: ip=%s gateway=%s\n", att.GetIpAddress(), att.GetGatewayIp())
+
+			if _, err := rt.CreateSandbox(ctx, &v1.CreateSandboxRequest{
+				Config: &v1.SandboxConfig{
+					Metadata:   &v1.SandboxMetadata{Uid: uid},
+					BootSource: &v1.SandboxConfig_CheckpointRef{CheckpointRef: checkpointRef},
+				},
+			}); err != nil {
+				return err
+			}
+
+			if _, err := rt.StartSandbox(ctx, &v1.StartSandboxRequest{SandboxId: uid}); err != nil {
+				return err
+			}
+
+			fmt.Printf("sandbox %s restored from checkpoint %s and running -- press Ctrl+C to exit\n", uid, checkpointRef)
+
+			sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			<-sigCtx.Done()
+
+			fmt.Printf("\nstopping -- sandbox %s is left running in the background\n", uid)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
+	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-restore-14", "new sandbox uid, must not already exist")
+
+	return cmd
+}
+
 // newValidateRunSandboxCmd is a temporary manual-testing command that
 // creates and starts a sandbox, then blocks until interrupted, all
 // within a single process. validate-create-sandbox and
@@ -339,8 +418,8 @@ func newValidateRunSandboxCmd() *cobra.Command {
 
 			if _, err := rt.CreateSandbox(ctx, &v1.CreateSandboxRequest{
 				Config: &v1.SandboxConfig{
-					Metadata: &v1.SandboxMetadata{Uid: uid},
-					Rootfs:   &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: image}, IsRootDevice: true, IsReadOnly: true},
+					Metadata:   &v1.SandboxMetadata{Uid: uid},
+					BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: image}, IsRootDevice: true, IsReadOnly: true}},
 					Resources: &v1.SandboxResources{
 						Cpu:          cpu,
 						MemoryBytes:  memoryMib << 20,
@@ -367,7 +446,7 @@ func newValidateRunSandboxCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
-	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-run-27", "sandbox uid")
+	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-restore-1", "sandbox uid")
 	cmd.Flags().Float64Var(&cpu, "cpu", 1, "vCPU count")
 	cmd.Flags().Int64Var(&memoryMib, "memory-mib", 512, "memory size, in MiB")
 	cmd.Flags().Int64Var(&storageMib, "storage-mib", 256, "overlay size, in MiB")
