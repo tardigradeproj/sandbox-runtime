@@ -238,11 +238,19 @@ message BootConfig {
 message SandboxConfig {
   SandboxMetadata metadata = 1;
 
-  // RootFS describes the root filesystem the sandbox should be launched
-  // with and how it is attached.
-  RootFSMount rootfs = 2;
+  oneof boot_source {
+    // RootFS describes the root filesystem the sandbox should be launched
+    // with and how it is attached.
+    RootFSMount rootfs = 2;
 
-  // Boot describes how to boot the sandbox's guest kernel.
+    // CheckpointRef resumes the sandbox from a checkpoint instead
+    // (see RuntimeService.CheckpointSandbox) -- boot and resources
+    // below are ignored, the checkpoint already captured both.
+    string checkpoint_ref = 7;
+  }
+
+  // Boot describes how to boot the sandbox's guest kernel. Ignored
+  // when boot_source is checkpoint_ref.
   BootConfig boot = 3;
 
   // Resources are the resources to reserve for the sandbox, allocated when
