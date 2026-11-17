@@ -39,6 +39,7 @@ type tarEntry struct {
 	typeflag byte
 	body     string
 	linkname string
+	mode     int64 // 0 means the type's own default (0o644/0o755)
 }
 
 type uncompressedLayer struct {
@@ -71,6 +72,9 @@ func buildLayer(t *testing.T, entries []tarEntry) ggcrv1.Layer {
 		if typeflag == tar.TypeDir {
 			hdr.Mode = 0o755
 			hdr.Size = 0
+		}
+		if e.mode != 0 {
+			hdr.Mode = e.mode
 		}
 		require.NoError(t, tw.WriteHeader(hdr))
 		if typeflag == tar.TypeReg && len(e.body) > 0 {
@@ -113,6 +117,24 @@ func TestUnpackMergesLayers(t *testing.T) {
 	got, err = os.ReadFile(filepath.Join(root, "etc/hosts"))
 	require.NoError(t, err)
 	assert.Equal(t, "127.0.0.1 localhost\n", string(got))
+}
+
+// TestUnpackPreservesSetuidBit guards against a real bug: writing a
+// regular file's content after creating it with a mode that already
+// includes setuid/setgid causes the kernel to silently clear those
+// bits on the write -- the file's real mode has to be set in a
+// trailing chmod after all writes are done, not at creation time.
+func TestUnpackPreservesSetuidBit(t *testing.T) {
+	img := buildImage(t, []tarEntry{
+		{name: "usr/bin/sudo", body: "fake binary", mode: 0o4755},
+	})
+	root := t.TempDir()
+	require.NoError(t, Unpack(context.Background(), img, root))
+
+	fi, err := os.Stat(filepath.Join(root, "usr/bin/sudo"))
+	require.NoError(t, err)
+	assert.NotZero(t, fi.Mode()&os.ModeSetuid, "setuid bit was stripped during unpack")
+	assert.Equal(t, os.FileMode(0o755), fi.Mode().Perm())
 }
 
 func TestUnpackWhiteoutRemovesLowerFile(t *testing.T) {

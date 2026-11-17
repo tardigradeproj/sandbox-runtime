@@ -99,15 +99,16 @@ func writeEntry(root, target string, hdr *tar.Header, tr *tar.Reader) (*pendingL
 		if err := ensureDir(target); err != nil {
 			return nil, err
 		}
-		if err := os.Chmod(target, hdr.FileInfo().Mode()); err != nil {
-			return nil, err
-		}
 
 	case tar.TypeReg:
 		if err := os.RemoveAll(target); err != nil {
 			return nil, err
 		}
-		f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, hdr.FileInfo().Mode())
+		// Written with a plain mode, not hdr's: the kernel silently
+		// clears setuid/setgid on write() to a file that already has
+		// them set, so the real mode has to be applied only after
+		// the content is written, not at creation time.
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 		if err != nil {
 			return nil, err
 		}
@@ -155,8 +156,23 @@ func writeEntry(root, target string, hdr *tar.Header, tr *tar.Reader) (*pendingL
 		return nil, fmt.Errorf("unsupported tar entry type %v", hdr.Typeflag)
 	}
 
-	if pending == nil {
-		applyPlatformMetadata(target, hdr)
+	// Hardlinks share their target's inode, already given correct
+	// ownership/mode when that entry was processed -- rechowning it
+	// here would strip any setuid/setgid bit again (see below).
+	if pending != nil || hdr.Typeflag == tar.TypeLink {
+		return pending, nil
+	}
+
+	// chown must run before the final chmod: on Linux, lchown
+	// unconditionally clears setuid/setgid on a regular file even
+	// when run as root, so setting the real mode has to be the last
+	// metadata operation, not applyPlatformMetadata's chown.
+	applyPlatformMetadata(target, hdr)
+
+	if hdr.Typeflag == tar.TypeDir || hdr.Typeflag == tar.TypeReg {
+		if err := os.Chmod(target, hdr.FileInfo().Mode()); err != nil {
+			return nil, err
+		}
 	}
 	return pending, nil
 }
