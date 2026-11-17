@@ -92,12 +92,18 @@ without `CAP_SYS_ADMIN`.
 ## Sandbox rootfs images
 
 ```sh
-make images            # build both sample rootfs images locally
-make images-busybox    # minimal busybox image
-make images-ubuntu     # ubuntu image
-make images-ubuntu-push  # build and push a multi-platform (amd64+arm64)
-                          # manifest; override REGISTRY_IMAGE/PLATFORMS
-                          # as needed
+make images                          # build all six sample rootfs images locally
+make images-minimal                  # minimal Ubuntu cloud image, no init manager at all
+make images-ubuntu-systemd-24.04     # Ubuntu 24.04, systemd + sandboxd as a unit
+make images-ubuntu-systemd-26.04     # same, Ubuntu 26.04
+make images-ubuntu-sandboxd-24.04    # Ubuntu 24.04, sandboxd as PID 1 (no systemd)
+make images-ubuntu-sandboxd-26.04    # same, Ubuntu 26.04
+make images-alpine                   # Alpine 3.24, OpenRC + sandboxd as a service
+
+make images-minimal-24.04-push          # build and push any of the above;
+make images-ubuntu-systemd-24.04-push   # REGISTRY_IMAGE is required (no
+make images-ubuntu-sandboxd-26.04-push  # default), PLATFORMS defaults to
+make images-alpine-push                 # amd64 only, see Makefile
 ```
 
 ## Status

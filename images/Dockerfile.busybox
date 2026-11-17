@@ -1,3 +1,0 @@
-FROM busybox:stable-musl
-
-COPY --chmod=755 init /init

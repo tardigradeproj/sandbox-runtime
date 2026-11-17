@@ -1,0 +1,32 @@
+# Ubuntu's own minimal cloud image (see issue4.md), with sandboxd as
+# PID 1 instead of systemd -- the AGENT_INIT=yes shape Kata Containers
+# uses for kata-agent. ROOTFS_TARBALL is downloaded by the Makefile
+# before this builds.
+ARG ROOTFS_TARBALL=minimal-rootfs.tar.xz
+
+FROM registry.k8s.io/agent-sandbox/sandboxd:v1.0.10 AS sandboxd
+
+FROM scratch
+ARG ROOTFS_TARBALL
+ADD ${ROOTFS_TARBALL} /
+
+# pivot_root moved into util-linux-extra on Ubuntu 26.04's minimal
+# image, not installed by default.
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends util-linux-extra \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# images/init tries /sbin/init first; removing it lets the sandboxd
+# branch win instead.
+RUN rm -f /sbin/init
+
+# Passwordless but NOPASSWD sudo -- see Dockerfile.ubuntu-systemd.
+RUN useradd -m -s /bin/bash sandbox \
+    && passwd -d sandbox \
+    && usermod -aG sudo sandbox \
+    && echo 'sandbox ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/sandbox
+
+COPY --from=sandboxd /usr/local/bin/sandboxd /usr/local/bin/sandboxd
+
+COPY --chmod=755 init /init

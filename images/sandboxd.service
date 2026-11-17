@@ -1,0 +1,10 @@
+[Unit]
+Description=sandboxd process execution agent
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/sandboxd
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,39 @@
+# Ubuntu's own minimal cloud image (see issue4.md), with systemd kept
+# and sandboxd wired up as an enabled unit. ROOTFS_TARBALL is
+# downloaded by the Makefile before this builds.
+ARG ROOTFS_TARBALL=minimal-rootfs.tar.xz
+
+FROM registry.k8s.io/agent-sandbox/sandboxd:v1.0.10 AS sandboxd
+
+FROM scratch
+ARG ROOTFS_TARBALL
+ADD ${ROOTFS_TARBALL} /
+
+# pivot_root moved into util-linux-extra on Ubuntu 26.04's minimal
+# image, not installed by default.
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends util-linux-extra \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Skip cloud-init's per-boot datasource probing -- wastes boot time
+# this project doesn't have to spare.
+RUN systemctl mask cloud-init.service cloud-init-local.service \
+      cloud-config.service cloud-final.service
+
+# Every sandbox clones this image; a baked-in machine-id would make
+# them all look like the same machine to systemd/journald/D-Bus.
+RUN rm -f /etc/machine-id /var/lib/dbus/machine-id && touch /etc/machine-id
+
+# Passwordless but NOPASSWD sudo, same model as AWS's ssm-user: the
+# channel is the security boundary, not the password.
+RUN useradd -m -s /bin/bash sandbox \
+    && passwd -d sandbox \
+    && usermod -aG sudo sandbox \
+    && echo 'sandbox ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/sandbox
+
+COPY --from=sandboxd /usr/local/bin/sandboxd /usr/local/bin/sandboxd
+COPY sandboxd.service /etc/systemd/system/sandboxd.service
+RUN systemctl enable sandboxd.service
+
+COPY --chmod=755 init /init

@@ -1,0 +1,7 @@
+#!/sbin/openrc-run
+
+name="sandboxd"
+description="sandboxd process execution agent"
+command="/usr/local/bin/sandboxd"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"

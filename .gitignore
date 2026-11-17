@@ -30,6 +30,9 @@ net.md
 issue.md
 issue2.md
 
+# Downloaded rootfs tarballs (see Makefile images-* targets)
+images/*.tar.xz
+
 # Editor/IDE
 # .idea/
 # .vscode/

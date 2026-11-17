@@ -9,6 +9,9 @@
 # shell on failure instead of just letting PID 1 die into a kernel
 # panic, so a boot problem is something you can poke at live.
 
+# dash (non-busybox images) doesn't default $PATH to cover sbin dirs.
+export PATH=/usr/local/sbin:/usr/local/bin:/sbin:/usr/sbin:/bin:/usr/bin
+
 LOWER_RO_DEVICE=/dev/vda
 WRITABLE_RW_DEVICE=/dev/vdb
 
@@ -25,6 +28,10 @@ echo "Setup essential mounts"
 mount -t devtmpfs none /dev
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
+# devtmpfs doesn't provide /dev/pts on its own -- without it, sudo
+# and anything else wanting a pty fails with "unable to allocate pty".
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
 # / is still the kernel's own direct, read-only mount of
 # $LOWER_RO_DEVICE at this point (per the "root=... ro" boot arg), so
 # nothing under it is writable yet -- not even to mkdir a mountpoint.
@@ -98,5 +105,7 @@ fi
 
 if [ -x /sbin/init ]; then
 	exec chroot . /sbin/init
+elif [ -x /usr/local/bin/sandboxd ]; then
+	exec chroot . /usr/local/bin/sandboxd
 fi
 exec chroot . /bin/sh

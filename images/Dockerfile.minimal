@@ -1,0 +1,20 @@
+# Ubuntu's own minimal cloud image (see issue4.md). ROOTFS_TARBALL is
+# downloaded by the Makefile before this builds.
+ARG ROOTFS_TARBALL=minimal-rootfs.tar.xz
+
+FROM scratch
+ARG ROOTFS_TARBALL
+ADD ${ROOTFS_TARBALL} /
+
+# No systemd in this tier -- removing /sbin/init falls through to
+# images/init's own /bin/sh fallback.
+RUN rm -f /sbin/init
+
+# pivot_root moved into util-linux-extra on Ubuntu 26.04's minimal
+# image, not installed by default.
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends util-linux-extra \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --chmod=755 init /init
