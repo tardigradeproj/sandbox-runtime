@@ -454,7 +454,11 @@ func TestBuildJailerConfig(t *testing.T) {
 		},
 	}
 
-	jc := buildJailerConfig(fc, 123, 456, "sandbox-1", "/var/lib/sandbox-runtime/vmlinux")
+	consoleLog, err := os.CreateTemp(t.TempDir(), "console.log")
+	require.NoError(t, err)
+	defer consoleLog.Close()
+
+	jc := buildJailerConfig(fc, 123, 456, "sandbox-1", "/var/lib/sandbox-runtime/vmlinux", consoleLog)
 
 	require.NotNil(t, jc)
 	assert.Equal(t, "sandbox-1", jc.ID)
@@ -469,9 +473,9 @@ func TestBuildJailerConfig(t *testing.T) {
 	assert.Equal(t, "/run/sandbox-runtime/jailer", jc.ChrootBaseDir)
 	assert.Equal(t, "2", jc.CgroupVersion)
 	assert.NotNil(t, jc.ChrootStrategy)
-	assert.Equal(t, os.Stdin, jc.Stdin)
-	assert.Equal(t, os.Stdout, jc.Stdout)
-	assert.Equal(t, os.Stderr, jc.Stderr)
+	assert.Nil(t, jc.Stdin)
+	assert.Equal(t, consoleLog, jc.Stdout)
+	assert.Equal(t, consoleLog, jc.Stderr)
 }
 
 func TestResolveJailerUIDGIDPrecreated(t *testing.T) {

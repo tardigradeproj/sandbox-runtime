@@ -199,11 +199,12 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	var machine *firecracker.Machine
 	var jailerUID, jailerGID int
 	if fc.Jailer.Enabled {
-		uid, gid, realSocketPath, err := r.jailSandbox(fc, sandboxID, overlayPath, kernelImagePath, &machineCfg, &cu)
+		uid, gid, realSocketPath, consoleLog, err := r.jailSandbox(fc, sandboxID, sandboxDir, overlayPath, kernelImagePath, &machineCfg, &cu)
 		if err != nil {
 			log.WithError(err).Error("create sandbox: failed to jail sandbox")
 			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 		}
+		defer consoleLog.Close()
 		socketPath = realSocketPath
 		jailerUID, jailerGID = uid, gid
 
@@ -222,18 +223,22 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	} else {
 		machineCfg.LogPath = logPath
 
-		// Wire the guest's console to our own stdio; a nil Stdin
-		// defaults to /dev/null, an immediate EOF.
+		consoleLog, err := openConsoleLog(sandboxDir)
+		if err != nil {
+			log.WithError(err).Error("create sandbox: failed to open console log")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
+		defer consoleLog.Close()
+
+		// Stdin omitted: the SDK defaults a nil Stdin to /dev/null.
 		cmd := firecracker.VMCommandBuilder{}.
 			WithBin(fc.Bin).
 			WithSocketPath(socketPath).
-			WithStdin(os.Stdin).
-			WithStdout(os.Stdout).
-			WithStderr(os.Stderr).
+			WithStdout(consoleLog).
+			WithStderr(consoleLog).
 			AddArgs("--id", sandboxID).
 			Build(ctx)
 
-		var err error
 		machine, err = firecracker.NewMachine(ctx, machineCfg, firecracker.WithProcessRunner(cmd))
 		if err != nil {
 			log.WithError(err).Error("create sandbox: failed to build firecracker machine config")
@@ -341,10 +346,11 @@ func (r *Runtime) createSandboxFromCheckpoint(ctx context.Context, req *v1.Creat
 		LogLevel: fc.Log.Level,
 		LogFifo:  logPath,
 	}
-	uid, gid, socketPath, err := r.jailSandbox(fc, sandboxID, overlayPath, "", &machineCfg, &cu)
+	uid, gid, socketPath, consoleLog, err := r.jailSandbox(fc, sandboxID, sandboxDir, overlayPath, "", &machineCfg, &cu)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
+	defer consoleLog.Close()
 
 	machine, err := firecracker.NewMachine(ctx, machineCfg, firecracker.WithSnapshot(memFilePath, snapshotPath))
 	if err != nil {
@@ -433,23 +439,29 @@ func linkCheckpointFilesHandler(fc cfg.Firecracker, sandboxID string, uid, gid i
 // to the overlay and tap device, registers cu release/cleanup
 // callbacks, and fills in machineCfg's jailer fields. kernelImagePath
 // may be "" when there's no kernel to boot (a checkpoint restore).
-func (r *Runtime) jailSandbox(fc cfg.Firecracker, sandboxID, overlayPath, kernelImagePath string, machineCfg *firecracker.Config, cu *cleanup.Cleanup) (uid, gid int, socketPath string, err error) {
+// The caller must close the returned console log after spawnSandbox.
+func (r *Runtime) jailSandbox(fc cfg.Firecracker, sandboxID, sandboxDir, overlayPath, kernelImagePath string, machineCfg *firecracker.Config, cu *cleanup.Cleanup) (uid, gid int, socketPath string, consoleLog *os.File, err error) {
 	uid, gid, err = r.resolveJailerUIDGID(fc.Jailer, sandboxID)
 	if err != nil {
-		return 0, 0, "", fmt.Errorf("obtain jailer uid/gid: %w", err)
+		return 0, 0, "", nil, fmt.Errorf("obtain jailer uid/gid: %w", err)
 	}
 
 	// Hard-linked into the chroot as-is, so the jailed uid/gid needs
 	// write access to the shared inode.
 	if err := os.Chown(overlayPath, uid, gid); err != nil {
-		return 0, 0, "", fmt.Errorf("chown overlay image for jailer: %w", err)
+		return 0, 0, "", nil, fmt.Errorf("chown overlay image for jailer: %w", err)
 	}
 
 	// The tap device (created earlier by AttachNetwork) is owned by
 	// root; without CAP_NET_ADMIN, the jailed uid can only open it if
 	// it's also the device's recorded owner.
 	if err := network.SetTapOwner(sandboxID, uid, gid); err != nil {
-		return 0, 0, "", fmt.Errorf("chown tap device for jailer: %w", err)
+		return 0, 0, "", nil, fmt.Errorf("chown tap device for jailer: %w", err)
+	}
+
+	consoleLog, err = openConsoleLog(sandboxDir)
+	if err != nil {
+		return 0, 0, "", nil, fmt.Errorf("open console log: %w", err)
 	}
 
 	if fc.Jailer.UIDGID.Mode == "on_demand" {
@@ -474,12 +486,12 @@ func (r *Runtime) jailSandbox(fc cfg.Firecracker, sandboxID, overlayPath, kernel
 			HostDevName: network.TapDeviceName,
 		},
 	}}
-	machineCfg.JailerCfg = buildJailerConfig(fc, uid, gid, sandboxID, kernelImagePath)
+	machineCfg.JailerCfg = buildJailerConfig(fc, uid, gid, sandboxID, kernelImagePath, consoleLog)
 
 	// Chroot-relative: the SDK's jail() rewrites this to the real
 	// host path (see jailerSocketPath).
 	machineCfg.SocketPath = firecrackerSocketName
-	return uid, gid, jailerSocketPath(fc, sandboxID), nil
+	return uid, gid, jailerSocketPath(fc, sandboxID), consoleLog, nil
 }
 
 // resolveJailerUIDGID returns the uid/gid to drop jailer's privileges
@@ -501,8 +513,8 @@ func (r *Runtime) resolveJailerUIDGID(jc cfg.Jailer, sandboxID string) (uid, gid
 
 // buildJailerConfig maps jailer config into the SDK's JailerConfig.
 // NumaNode and CgroupVersion are hardcoded, not configurable yet (see
-// TODO.md).
-func buildJailerConfig(fc cfg.Firecracker, uid, gid int, sandboxID, kernelImagePath string) *firecracker.JailerConfig {
+// TODO.md). Stdin is left nil, which the SDK defaults to /dev/null.
+func buildJailerConfig(fc cfg.Firecracker, uid, gid int, sandboxID, kernelImagePath string, consoleLog *os.File) *firecracker.JailerConfig {
 	return &firecracker.JailerConfig{
 		ID:             sandboxID,
 		UID:            firecracker.Int(uid),
@@ -513,10 +525,14 @@ func buildJailerConfig(fc cfg.Firecracker, uid, gid int, sandboxID, kernelImageP
 		ChrootBaseDir:  fc.Jailer.ChrootBaseDir,
 		ChrootStrategy: firecracker.NewNaiveChrootStrategy(kernelImagePath),
 		CgroupVersion:  "2",
-		Stdin:          os.Stdin,
-		Stdout:         os.Stdout,
-		Stderr:         os.Stderr,
+		Stdout:         consoleLog,
+		Stderr:         consoleLog,
 	}
+}
+
+// openConsoleLog opens sandboxDir's console.log, truncating any stale content.
+func openConsoleLog(sandboxDir string) (*os.File, error) {
+	return os.OpenFile(filepath.Join(sandboxDir, "console.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 }
 
 // StartSandbox boots a sandbox that CreateSandbox already spawned and
