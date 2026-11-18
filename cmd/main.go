@@ -50,6 +50,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newValidateCreateSandboxCmd())
 	cmd.AddCommand(newValidateStartSandboxCmd())
 	cmd.AddCommand(newValidateStopSandboxCmd())
+	cmd.AddCommand(newValidateRemoveSandboxCmd())
+	cmd.AddCommand(newValidateDetachNetworkCmd())
 	cmd.AddCommand(newValidateCheckpointSandboxCmd())
 	cmd.AddCommand(newValidateRestoreSandboxCmd())
 	cmd.AddCommand(newValidateRunSandboxCmd())

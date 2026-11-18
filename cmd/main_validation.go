@@ -217,6 +217,99 @@ func newValidateStopSandboxCmd() *cobra.Command {
 	return cmd
 }
 
+// newValidateDetachNetworkCmd is a temporary manual-testing command
+// for exercising DetachNetwork directly from the CLI. sandbox-id must
+// match the uid an earlier AttachNetwork (e.g. via
+// validate-run-sandbox or validate-restore-sandbox) was given, e.g.:
+//
+//	go run ./cmd validate-detach-network test-1
+func newValidateDetachNetworkCmd() *cobra.Command {
+	var configPath string
+
+	cmd := &cobra.Command{
+		Use:   "validate-detach-network <sandbox-id>",
+		Short: "temporary: detach a sandbox's network and print the result",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sandboxID := args[0]
+
+			c, err := cfg.Load(configPath)
+			if err != nil {
+				return err
+			}
+
+			nsvc, err := network.New(c)
+			if err != nil {
+				return err
+			}
+
+			if _, err := nsvc.DetachNetwork(context.Background(), &v1.DetachNetworkRequest{SandboxId: sandboxID}); err != nil {
+				return err
+			}
+
+			fmt.Printf("detached network for sandbox %s\n", sandboxID)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
+
+	return cmd
+}
+
+// newValidateRemoveSandboxCmd is a temporary manual-testing command
+// for exercising RemoveSandbox directly from the CLI, e.g.:
+//
+//	go run ./cmd validate-remove-sandbox test-1 --force --timeout-seconds 5
+func newValidateRemoveSandboxCmd() *cobra.Command {
+	var (
+		configPath     string
+		force          bool
+		timeoutSeconds int64
+	)
+
+	cmd := &cobra.Command{
+		Use:   "validate-remove-sandbox <sandbox-id>",
+		Short: "temporary: remove a sandbox and print the result",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sandboxID := args[0]
+
+			c, err := cfg.Load(configPath)
+			if err != nil {
+				return err
+			}
+
+			st, err := store.New(c.Rootfs.Dir)
+			if err != nil {
+				return err
+			}
+
+			rt, err := runtime.NewRuntime(c, st)
+			if err != nil {
+				return err
+			}
+
+			if _, err := rt.RemoveSandbox(context.Background(), &v1.RemoveSandboxRequest{
+				SandboxId:      sandboxID,
+				Force:          force,
+				TimeoutSeconds: timeoutSeconds,
+			}); err != nil {
+				return err
+			}
+
+			fmt.Printf("removed sandbox %s\n", sandboxID)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
+	cmd.Flags().BoolVar(&force, "force", false, "kill the sandbox process if it's still running once timeout-seconds elapses")
+	cmd.Flags().Int64Var(&timeoutSeconds, "timeout-seconds", 0, "how long to wait for the guest to shut down gracefully before giving up (or killing it, with --force)")
+
+	return cmd
+}
+
 // newValidateCheckpointSandboxCmd is a temporary manual-testing
 // command for exercising CheckpointSandbox directly from the CLI.
 // The sandbox must already be stopped (see validate-stop-sandbox),
@@ -446,7 +539,7 @@ func newValidateRunSandboxCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
-	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-restore-1", "sandbox uid")
+	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-restore-2", "sandbox uid")
 	cmd.Flags().Float64Var(&cpu, "cpu", 1, "vCPU count")
 	cmd.Flags().Int64Var(&memoryMib, "memory-mib", 512, "memory size, in MiB")
 	cmd.Flags().Int64Var(&storageMib, "storage-mib", 256, "overlay size, in MiB")

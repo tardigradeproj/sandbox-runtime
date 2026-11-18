@@ -30,6 +30,14 @@ service RuntimeService {
   // undo it.
   rpc StopSandbox(StopSandboxRequest) returns (StopSandboxResponse) {}
 
+  // RemoveSandbox asks a running sandbox's guest to shut down
+  // gracefully (SendCtrlAltDel over its API socket), then releases
+  // what CreateSandbox allocated for it, except its network
+  // namespace/tap device -- see DetachNetwork for that. See
+  // RemoveSandboxRequest.force for what happens if the guest doesn't
+  // shut down on its own in time.
+  rpc RemoveSandbox(RemoveSandboxRequest) returns (RemoveSandboxResponse) {}
+
   // CheckpointSandbox captures a stopped sandbox's VM state to disk,
   // so CreateSandbox can later resume a new sandbox from it. Requires
   // the sandbox to already be stopped; fails if it's still running.
@@ -280,6 +288,24 @@ message StopSandboxRequest {
 }
 
 message StopSandboxResponse {}
+
+message RemoveSandboxRequest {
+  string sandbox_id = 1;
+
+  // force, if set, kills the sandbox's process with SIGKILL once
+  // timeout_seconds elapses without it shutting down on its own. If
+  // unset and the sandbox is still running after timeout_seconds,
+  // RemoveSandbox fails instead of killing it.
+  bool force = 2;
+
+  // timeout_seconds bounds how long RemoveSandbox waits, after asking
+  // the guest to shut down gracefully, before deciding it's not going
+  // to stop on its own. 0 means don't wait at all. Ignored if the
+  // sandbox isn't running.
+  int64 timeout_seconds = 3;
+}
+
+message RemoveSandboxResponse {}
 
 message CheckpointSandboxRequest {
   string sandbox_id = 1;

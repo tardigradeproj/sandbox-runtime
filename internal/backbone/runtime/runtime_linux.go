@@ -24,7 +24,9 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	firecracker "github.com/firecracker-microvm/firecracker-go-sdk"
@@ -618,6 +620,128 @@ func (r *Runtime) StopSandbox(ctx context.Context, req *v1.StopSandboxRequest) (
 
 	log.Info("sandbox stopped")
 	return &v1.StopSandboxResponse{}, nil
+}
+
+// RemoveSandbox asks sandboxID's guest to shut down gracefully
+// (SendCtrlAltDel over its firecracker API socket), waits up to
+// req.TimeoutSeconds for its firecracker/jailer process to exit on
+// its own, and releases what CreateSandbox allocated for it, except
+// its network namespace/tap device.
+func (r *Runtime) RemoveSandbox(ctx context.Context, req *v1.RemoveSandboxRequest) (*v1.RemoveSandboxResponse, error) {
+	sandboxID := req.GetSandboxId()
+	if sandboxID == "" {
+		return nil, status.Error(codes.InvalidArgument, "sandbox_id must be set")
+	}
+	log := logrus.WithField(obs.SandboxID, sandboxID)
+	log.Info("removing sandbox")
+
+	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	if _, err := os.Stat(sandboxDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "sandbox %q not found", sandboxID)
+		}
+		log.WithError(err).Error("remove sandbox: failed to stat sandbox dir")
+		return nil, status.Errorf(codes.Internal, "remove sandbox: %v", err)
+	}
+
+	fc := r.cfg.Runtime.Firecracker
+	socketPath := filepath.Join(sandboxDir, firecrackerSocketName)
+	if fc.Jailer.Enabled {
+		socketPath = jailerSocketPath(fc, sandboxID)
+	}
+	if _, err := os.Stat(socketPath); err == nil {
+		client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+		if _, err := client.CreateSyncAction(ctx, &models.InstanceActionInfo{ActionType: new(models.InstanceActionInfoActionTypeSendCtrlAltDel)}); err != nil {
+			log.WithError(err).Warn("remove sandbox: failed to send ctrl-alt-del, falling back to timeout/force")
+		}
+	}
+
+	pids, err := sandboxProcessPids(sandboxID)
+	if err != nil {
+		log.WithError(err).Error("remove sandbox: failed to list sandbox processes")
+		return nil, status.Errorf(codes.Internal, "remove sandbox: %v", err)
+	}
+	deadline := time.Now().Add(time.Duration(req.GetTimeoutSeconds()) * time.Second)
+	for len(pids) > 0 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		if pids, err = sandboxProcessPids(sandboxID); err != nil {
+			log.WithError(err).Error("remove sandbox: failed to list sandbox processes")
+			return nil, status.Errorf(codes.Internal, "remove sandbox: %v", err)
+		}
+	}
+	if len(pids) > 0 {
+		if !req.GetForce() {
+			return nil, status.Errorf(codes.DeadlineExceeded,
+				"remove sandbox: still running after %ds, retry with force to kill it", req.GetTimeoutSeconds())
+		}
+		if err := killPids(pids); err != nil {
+			log.WithError(err).Error("remove sandbox: failed to kill process")
+			return nil, status.Errorf(codes.Internal, "remove sandbox: %v", err)
+		}
+	}
+
+	if fc.Jailer.Enabled {
+		chrootDir := filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin), sandboxID)
+		if err := os.RemoveAll(chrootDir); err != nil {
+			log.WithError(err).Error("remove sandbox: failed to remove jailer chroot dir")
+			return nil, status.Errorf(codes.Internal, "remove sandbox: %v", err)
+		}
+		if fc.Jailer.UIDGID.Mode == "on_demand" {
+			if desc, err := readSandboxDescriptor(sandboxDir); err != nil {
+				log.WithError(err).Warn("remove sandbox: failed to read descriptor, skipping jailer id release")
+			} else if err := r.jailerIDs.Release(desc.UID); err != nil {
+				log.WithError(err).Warn("remove sandbox: failed to release jailer id")
+			}
+		}
+	}
+
+	if err := os.RemoveAll(sandboxDir); err != nil {
+		log.WithError(err).Error("remove sandbox: failed to remove sandbox dir")
+		return nil, status.Errorf(codes.Internal, "remove sandbox: %v", err)
+	}
+
+	log.Info("sandbox removed")
+	return &v1.RemoveSandboxResponse{}, nil
+}
+
+// sandboxProcessPids finds every running process (firecracker, and
+// jailer if enabled) whose command line carries "--id sandboxID", via
+// /proc rather than any in-memory state, since RuntimeService RPCs
+// reconnect statelessly.
+func sandboxProcessPids(sandboxID string) ([]int, error) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, fmt.Errorf("list /proc: %w", err)
+	}
+	var pids []int
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		cmdline, err := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline"))
+		if err != nil {
+			continue
+		}
+		args := strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")
+		for i, a := range args {
+			if a == "--id" && i+1 < len(args) && args[i+1] == sandboxID {
+				pids = append(pids, pid)
+				break
+			}
+		}
+	}
+	return pids, nil
+}
+
+// killPids SIGKILLs every pid, ignoring ones that are already gone.
+func killPids(pids []int) error {
+	for _, pid := range pids {
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			return fmt.Errorf("kill pid %d: %w", pid, err)
+		}
+	}
+	return nil
 }
 
 // CheckpointSandbox captures a stopped sandbox's VM state (via

@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -645,4 +646,164 @@ func TestStopSandboxSuccess(t *testing.T) {
 	// Stopping an already-paused sandbox is idempotent, not an error.
 	_, err = r.StopSandbox(context.Background(), &v1.StopSandboxRequest{SandboxId: createResp.GetSandboxId()})
 	require.NoError(t, err)
+}
+
+func TestRemoveSandboxRequiresSandboxId(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, err := r.RemoveSandbox(context.Background(), &v1.RemoveSandboxRequest{})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestRemoveSandboxUnknownSandbox(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, err := r.RemoveSandbox(context.Background(), &v1.RemoveSandboxRequest{SandboxId: "does-not-exist"})
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+// TestRemoveSandboxSuccess creates a real sandbox (fake firecracker
+// process and all), removes it with force set (the fake process never
+// actually shuts down on its own, since it doesn't act on
+// SendCtrlAltDel), and verifies the process is actually killed and the
+// sandbox dir actually gone, not just that the call returned no error.
+func TestRemoveSandboxSuccess(t *testing.T) {
+	fakeMkfsExt4(t, filepath.Join(t.TempDir(), "args.txt"))
+
+	stateDir := t.TempDir()
+	r, st := newTestRuntimeWithFakeFirecracker(t, stateDir, false)
+	seedRootfsEntry(t, st, "myimage:latest")
+
+	createResp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
+		Config: &v1.SandboxConfig{
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
+		},
+	})
+	require.NoError(t, err)
+	sandboxID := createResp.GetSandboxId()
+
+	pidData, err := os.ReadFile(os.Getenv(fakeFirecrackerPidFileEnv))
+	require.NoError(t, err)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+	require.NoError(t, err)
+
+	_, err = r.RemoveSandbox(context.Background(), &v1.RemoveSandboxRequest{SandboxId: sandboxID, Force: true})
+	require.NoError(t, err)
+
+	assert.Eventually(t, func() bool {
+		return syscall.Kill(pid, 0) == syscall.ESRCH
+	}, time.Second, 10*time.Millisecond, "fake firecracker process still alive after RemoveSandbox")
+
+	_, err = os.Stat(filepath.Join(stateDir, sandboxID))
+	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be removed")
+}
+
+// TestRemoveSandboxSendsCtrlAltDel verifies RemoveSandbox asks the
+// guest to shut down gracefully over the API socket before it ever
+// considers killing the process.
+func TestRemoveSandboxSendsCtrlAltDel(t *testing.T) {
+	fakeMkfsExt4(t, filepath.Join(t.TempDir(), "args.txt"))
+
+	reqLogPath := filepath.Join(t.TempDir(), "requests.log")
+	require.NoError(t, os.Setenv(fakeFirecrackerReqLogEnv, reqLogPath))
+	t.Cleanup(func() { os.Unsetenv(fakeFirecrackerReqLogEnv) })
+
+	stateDir := t.TempDir()
+	r, st := newTestRuntimeWithFakeFirecracker(t, stateDir, false)
+	seedRootfsEntry(t, st, "myimage:latest")
+
+	createResp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
+		Config: &v1.SandboxConfig{
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = r.RemoveSandbox(context.Background(), &v1.RemoveSandboxRequest{
+		SandboxId: createResp.GetSandboxId(),
+		Force:     true,
+	})
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(reqLogPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(got), "PUT /actions")
+}
+
+// TestRemoveSandboxWithoutForceFailsIfStillRunning verifies that when
+// the guest doesn't shut down on its own within timeout_seconds and
+// force isn't set, RemoveSandbox fails instead of killing the process.
+func TestRemoveSandboxWithoutForceFailsIfStillRunning(t *testing.T) {
+	fakeMkfsExt4(t, filepath.Join(t.TempDir(), "args.txt"))
+
+	stateDir := t.TempDir()
+	r, st := newTestRuntimeWithFakeFirecracker(t, stateDir, false)
+	seedRootfsEntry(t, st, "myimage:latest")
+
+	createResp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
+		Config: &v1.SandboxConfig{
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
+		},
+	})
+	require.NoError(t, err)
+	sandboxID := createResp.GetSandboxId()
+
+	pidData, err := os.ReadFile(os.Getenv(fakeFirecrackerPidFileEnv))
+	require.NoError(t, err)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+	require.NoError(t, err)
+
+	_, err = r.RemoveSandbox(context.Background(), &v1.RemoveSandboxRequest{SandboxId: sandboxID})
+	assert.Equal(t, codes.DeadlineExceeded, status.Code(err))
+
+	// Not force-killed, and not cleaned up.
+	assert.NoError(t, syscall.Kill(pid, 0), "fake firecracker process should still be alive")
+	_, err = os.Stat(filepath.Join(stateDir, sandboxID))
+	assert.NoError(t, err, "expected sandbox dir to still exist")
+}
+
+// TestRemoveSandboxForceKillsAfterTimeout verifies that once
+// timeout_seconds elapses with the guest still running, RemoveSandbox
+// falls back to killing it when force is set.
+func TestRemoveSandboxForceKillsAfterTimeout(t *testing.T) {
+	fakeMkfsExt4(t, filepath.Join(t.TempDir(), "args.txt"))
+
+	stateDir := t.TempDir()
+	r, st := newTestRuntimeWithFakeFirecracker(t, stateDir, false)
+	seedRootfsEntry(t, st, "myimage:latest")
+
+	createResp, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
+		Config: &v1.SandboxConfig{
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 4 << 30, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
+		},
+	})
+	require.NoError(t, err)
+	sandboxID := createResp.GetSandboxId()
+
+	pidData, err := os.ReadFile(os.Getenv(fakeFirecrackerPidFileEnv))
+	require.NoError(t, err)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+	require.NoError(t, err)
+
+	start := time.Now()
+	_, err = r.RemoveSandbox(context.Background(), &v1.RemoveSandboxRequest{
+		SandboxId:      sandboxID,
+		Force:          true,
+		TimeoutSeconds: 1,
+	})
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, time.Since(start), time.Second, "expected RemoveSandbox to wait out the timeout before killing")
+
+	assert.Eventually(t, func() bool {
+		return syscall.Kill(pid, 0) == syscall.ESRCH
+	}, time.Second, 10*time.Millisecond, "fake firecracker process still alive after RemoveSandbox")
+
+	_, err = os.Stat(filepath.Join(stateDir, sandboxID))
+	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be removed")
 }

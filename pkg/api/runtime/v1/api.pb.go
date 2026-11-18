@@ -1434,6 +1434,110 @@ func (*StopSandboxResponse) Descriptor() ([]byte, []int) {
 	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{25}
 }
 
+type RemoveSandboxRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	// force, if set, kills the sandbox's process with SIGKILL once
+	// timeout_seconds elapses without it shutting down on its own. If
+	// unset and the sandbox is still running after timeout_seconds,
+	// RemoveSandbox fails instead of killing it.
+	Force bool `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"`
+	// timeout_seconds bounds how long RemoveSandbox waits, after asking
+	// the guest to shut down gracefully, before deciding it's not going
+	// to stop on its own. 0 means don't wait at all. Ignored if the
+	// sandbox isn't running.
+	TimeoutSeconds int64 `protobuf:"varint,3,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RemoveSandboxRequest) Reset() {
+	*x = RemoveSandboxRequest{}
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveSandboxRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveSandboxRequest) ProtoMessage() {}
+
+func (x *RemoveSandboxRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveSandboxRequest.ProtoReflect.Descriptor instead.
+func (*RemoveSandboxRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *RemoveSandboxRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *RemoveSandboxRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *RemoveSandboxRequest) GetTimeoutSeconds() int64 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+type RemoveSandboxResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveSandboxResponse) Reset() {
+	*x = RemoveSandboxResponse{}
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveSandboxResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveSandboxResponse) ProtoMessage() {}
+
+func (x *RemoveSandboxResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveSandboxResponse.ProtoReflect.Descriptor instead.
+func (*RemoveSandboxResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{27}
+}
+
 type CheckpointSandboxRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
@@ -1449,7 +1553,7 @@ type CheckpointSandboxRequest struct {
 
 func (x *CheckpointSandboxRequest) Reset() {
 	*x = CheckpointSandboxRequest{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[26]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1461,7 +1565,7 @@ func (x *CheckpointSandboxRequest) String() string {
 func (*CheckpointSandboxRequest) ProtoMessage() {}
 
 func (x *CheckpointSandboxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[26]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1474,7 +1578,7 @@ func (x *CheckpointSandboxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckpointSandboxRequest.ProtoReflect.Descriptor instead.
 func (*CheckpointSandboxRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{26}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CheckpointSandboxRequest) GetSandboxId() string {
@@ -1509,7 +1613,7 @@ type CheckpointSandboxResponse struct {
 
 func (x *CheckpointSandboxResponse) Reset() {
 	*x = CheckpointSandboxResponse{}
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[27]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1521,7 +1625,7 @@ func (x *CheckpointSandboxResponse) String() string {
 func (*CheckpointSandboxResponse) ProtoMessage() {}
 
 func (x *CheckpointSandboxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[27]
+	mi := &file_pkg_api_runtime_v1_api_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1534,7 +1638,7 @@ func (x *CheckpointSandboxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckpointSandboxResponse.ProtoReflect.Descriptor instead.
 func (*CheckpointSandboxResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{27}
+	return file_pkg_api_runtime_v1_api_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CheckpointSandboxResponse) GetCheckpointRef() string {
@@ -1648,18 +1752,25 @@ const file_pkg_api_runtime_v1_api_proto_rawDesc = "" +
 	"\x12StopSandboxRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\x15\n" +
-	"\x13StopSandboxResponse\"_\n" +
+	"\x13StopSandboxResponse\"t\n" +
+	"\x14RemoveSandboxRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x14\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\x12'\n" +
+	"\x0ftimeout_seconds\x18\x03 \x01(\x03R\x0etimeoutSeconds\"\x17\n" +
+	"\x15RemoveSandboxResponse\"_\n" +
 	"\x18CheckpointSandboxRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x10\n" +
 	"\x03uid\x18\x02 \x01(\tR\x03uid\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"B\n" +
 	"\x19CheckpointSandboxResponse\x12%\n" +
-	"\x0echeckpoint_ref\x18\x01 \x01(\tR\rcheckpointRef2\xf3\x02\n" +
+	"\x0echeckpoint_ref\x18\x01 \x01(\tR\rcheckpointRef2\xcb\x03\n" +
 	"\x0eRuntimeService\x12V\n" +
 	"\rCreateSandbox\x12 .runtime.v1.CreateSandboxRequest\x1a!.runtime.v1.CreateSandboxResponse\"\x00\x12S\n" +
 	"\fStartSandbox\x12\x1f.runtime.v1.StartSandboxRequest\x1a .runtime.v1.StartSandboxResponse\"\x00\x12P\n" +
-	"\vStopSandbox\x12\x1e.runtime.v1.StopSandboxRequest\x1a\x1f.runtime.v1.StopSandboxResponse\"\x00\x12b\n" +
+	"\vStopSandbox\x12\x1e.runtime.v1.StopSandboxRequest\x1a\x1f.runtime.v1.StopSandboxResponse\"\x00\x12V\n" +
+	"\rRemoveSandbox\x12 .runtime.v1.RemoveSandboxRequest\x1a!.runtime.v1.RemoveSandboxResponse\"\x00\x12b\n" +
 	"\x11CheckpointSandbox\x12$.runtime.v1.CheckpointSandboxRequest\x1a%.runtime.v1.CheckpointSandboxResponse\"\x002\xd7\x02\n" +
 	"\rRootFSService\x12M\n" +
 	"\n" +
@@ -1684,7 +1795,7 @@ func file_pkg_api_runtime_v1_api_proto_rawDescGZIP() []byte {
 	return file_pkg_api_runtime_v1_api_proto_rawDescData
 }
 
-var file_pkg_api_runtime_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_pkg_api_runtime_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_pkg_api_runtime_v1_api_proto_goTypes = []any{
 	(*AttachNetworkRequest)(nil),      // 0: runtime.v1.AttachNetworkRequest
 	(*AttachNetworkResponse)(nil),     // 1: runtime.v1.AttachNetworkResponse
@@ -1712,22 +1823,24 @@ var file_pkg_api_runtime_v1_api_proto_goTypes = []any{
 	(*StartSandboxResponse)(nil),      // 23: runtime.v1.StartSandboxResponse
 	(*StopSandboxRequest)(nil),        // 24: runtime.v1.StopSandboxRequest
 	(*StopSandboxResponse)(nil),       // 25: runtime.v1.StopSandboxResponse
-	(*CheckpointSandboxRequest)(nil),  // 26: runtime.v1.CheckpointSandboxRequest
-	(*CheckpointSandboxResponse)(nil), // 27: runtime.v1.CheckpointSandboxResponse
-	nil,                               // 28: runtime.v1.RootFSSpec.AnnotationsEntry
-	nil,                               // 29: runtime.v1.RootFSStatusResponse.InfoEntry
-	nil,                               // 30: runtime.v1.SandboxConfig.LabelsEntry
-	nil,                               // 31: runtime.v1.SandboxConfig.AnnotationsEntry
+	(*RemoveSandboxRequest)(nil),      // 26: runtime.v1.RemoveSandboxRequest
+	(*RemoveSandboxResponse)(nil),     // 27: runtime.v1.RemoveSandboxResponse
+	(*CheckpointSandboxRequest)(nil),  // 28: runtime.v1.CheckpointSandboxRequest
+	(*CheckpointSandboxResponse)(nil), // 29: runtime.v1.CheckpointSandboxResponse
+	nil,                               // 30: runtime.v1.RootFSSpec.AnnotationsEntry
+	nil,                               // 31: runtime.v1.RootFSStatusResponse.InfoEntry
+	nil,                               // 32: runtime.v1.SandboxConfig.LabelsEntry
+	nil,                               // 33: runtime.v1.SandboxConfig.AnnotationsEntry
 }
 var file_pkg_api_runtime_v1_api_proto_depIdxs = []int32{
-	28, // 0: runtime.v1.RootFSSpec.annotations:type_name -> runtime.v1.RootFSSpec.AnnotationsEntry
+	30, // 0: runtime.v1.RootFSSpec.annotations:type_name -> runtime.v1.RootFSSpec.AnnotationsEntry
 	4,  // 1: runtime.v1.RootFS.spec:type_name -> runtime.v1.RootFSSpec
 	4,  // 2: runtime.v1.RootFSFilter.spec:type_name -> runtime.v1.RootFSSpec
 	6,  // 3: runtime.v1.ListRootFSRequest.filter:type_name -> runtime.v1.RootFSFilter
 	5,  // 4: runtime.v1.ListRootFSResponse.rootfs:type_name -> runtime.v1.RootFS
 	4,  // 5: runtime.v1.RootFSStatusRequest.spec:type_name -> runtime.v1.RootFSSpec
 	5,  // 6: runtime.v1.RootFSStatusResponse.rootfs:type_name -> runtime.v1.RootFS
-	29, // 7: runtime.v1.RootFSStatusResponse.info:type_name -> runtime.v1.RootFSStatusResponse.InfoEntry
+	31, // 7: runtime.v1.RootFSStatusResponse.info:type_name -> runtime.v1.RootFSStatusResponse.InfoEntry
 	4,  // 8: runtime.v1.PullRootFSRequest.spec:type_name -> runtime.v1.RootFSSpec
 	4,  // 9: runtime.v1.RemoveRootFSRequest.spec:type_name -> runtime.v1.RootFSSpec
 	4,  // 10: runtime.v1.RootFSMount.spec:type_name -> runtime.v1.RootFSSpec
@@ -1735,31 +1848,33 @@ var file_pkg_api_runtime_v1_api_proto_depIdxs = []int32{
 	17, // 12: runtime.v1.SandboxConfig.rootfs:type_name -> runtime.v1.RootFSMount
 	18, // 13: runtime.v1.SandboxConfig.boot:type_name -> runtime.v1.BootConfig
 	16, // 14: runtime.v1.SandboxConfig.resources:type_name -> runtime.v1.SandboxResources
-	30, // 15: runtime.v1.SandboxConfig.labels:type_name -> runtime.v1.SandboxConfig.LabelsEntry
-	31, // 16: runtime.v1.SandboxConfig.annotations:type_name -> runtime.v1.SandboxConfig.AnnotationsEntry
+	32, // 15: runtime.v1.SandboxConfig.labels:type_name -> runtime.v1.SandboxConfig.LabelsEntry
+	33, // 16: runtime.v1.SandboxConfig.annotations:type_name -> runtime.v1.SandboxConfig.AnnotationsEntry
 	19, // 17: runtime.v1.CreateSandboxRequest.config:type_name -> runtime.v1.SandboxConfig
 	20, // 18: runtime.v1.RuntimeService.CreateSandbox:input_type -> runtime.v1.CreateSandboxRequest
 	22, // 19: runtime.v1.RuntimeService.StartSandbox:input_type -> runtime.v1.StartSandboxRequest
 	24, // 20: runtime.v1.RuntimeService.StopSandbox:input_type -> runtime.v1.StopSandboxRequest
-	26, // 21: runtime.v1.RuntimeService.CheckpointSandbox:input_type -> runtime.v1.CheckpointSandboxRequest
-	7,  // 22: runtime.v1.RootFSService.ListRootFS:input_type -> runtime.v1.ListRootFSRequest
-	9,  // 23: runtime.v1.RootFSService.RootFSStatus:input_type -> runtime.v1.RootFSStatusRequest
-	11, // 24: runtime.v1.RootFSService.PullRootFS:input_type -> runtime.v1.PullRootFSRequest
-	13, // 25: runtime.v1.RootFSService.RemoveRootFS:input_type -> runtime.v1.RemoveRootFSRequest
-	0,  // 26: runtime.v1.NetworkService.AttachNetwork:input_type -> runtime.v1.AttachNetworkRequest
-	2,  // 27: runtime.v1.NetworkService.DetachNetwork:input_type -> runtime.v1.DetachNetworkRequest
-	21, // 28: runtime.v1.RuntimeService.CreateSandbox:output_type -> runtime.v1.CreateSandboxResponse
-	23, // 29: runtime.v1.RuntimeService.StartSandbox:output_type -> runtime.v1.StartSandboxResponse
-	25, // 30: runtime.v1.RuntimeService.StopSandbox:output_type -> runtime.v1.StopSandboxResponse
-	27, // 31: runtime.v1.RuntimeService.CheckpointSandbox:output_type -> runtime.v1.CheckpointSandboxResponse
-	8,  // 32: runtime.v1.RootFSService.ListRootFS:output_type -> runtime.v1.ListRootFSResponse
-	10, // 33: runtime.v1.RootFSService.RootFSStatus:output_type -> runtime.v1.RootFSStatusResponse
-	12, // 34: runtime.v1.RootFSService.PullRootFS:output_type -> runtime.v1.PullRootFSResponse
-	14, // 35: runtime.v1.RootFSService.RemoveRootFS:output_type -> runtime.v1.RemoveRootFSResponse
-	1,  // 36: runtime.v1.NetworkService.AttachNetwork:output_type -> runtime.v1.AttachNetworkResponse
-	3,  // 37: runtime.v1.NetworkService.DetachNetwork:output_type -> runtime.v1.DetachNetworkResponse
-	28, // [28:38] is the sub-list for method output_type
-	18, // [18:28] is the sub-list for method input_type
+	26, // 21: runtime.v1.RuntimeService.RemoveSandbox:input_type -> runtime.v1.RemoveSandboxRequest
+	28, // 22: runtime.v1.RuntimeService.CheckpointSandbox:input_type -> runtime.v1.CheckpointSandboxRequest
+	7,  // 23: runtime.v1.RootFSService.ListRootFS:input_type -> runtime.v1.ListRootFSRequest
+	9,  // 24: runtime.v1.RootFSService.RootFSStatus:input_type -> runtime.v1.RootFSStatusRequest
+	11, // 25: runtime.v1.RootFSService.PullRootFS:input_type -> runtime.v1.PullRootFSRequest
+	13, // 26: runtime.v1.RootFSService.RemoveRootFS:input_type -> runtime.v1.RemoveRootFSRequest
+	0,  // 27: runtime.v1.NetworkService.AttachNetwork:input_type -> runtime.v1.AttachNetworkRequest
+	2,  // 28: runtime.v1.NetworkService.DetachNetwork:input_type -> runtime.v1.DetachNetworkRequest
+	21, // 29: runtime.v1.RuntimeService.CreateSandbox:output_type -> runtime.v1.CreateSandboxResponse
+	23, // 30: runtime.v1.RuntimeService.StartSandbox:output_type -> runtime.v1.StartSandboxResponse
+	25, // 31: runtime.v1.RuntimeService.StopSandbox:output_type -> runtime.v1.StopSandboxResponse
+	27, // 32: runtime.v1.RuntimeService.RemoveSandbox:output_type -> runtime.v1.RemoveSandboxResponse
+	29, // 33: runtime.v1.RuntimeService.CheckpointSandbox:output_type -> runtime.v1.CheckpointSandboxResponse
+	8,  // 34: runtime.v1.RootFSService.ListRootFS:output_type -> runtime.v1.ListRootFSResponse
+	10, // 35: runtime.v1.RootFSService.RootFSStatus:output_type -> runtime.v1.RootFSStatusResponse
+	12, // 36: runtime.v1.RootFSService.PullRootFS:output_type -> runtime.v1.PullRootFSResponse
+	14, // 37: runtime.v1.RootFSService.RemoveRootFS:output_type -> runtime.v1.RemoveRootFSResponse
+	1,  // 38: runtime.v1.NetworkService.AttachNetwork:output_type -> runtime.v1.AttachNetworkResponse
+	3,  // 39: runtime.v1.NetworkService.DetachNetwork:output_type -> runtime.v1.DetachNetworkResponse
+	29, // [29:40] is the sub-list for method output_type
+	18, // [18:29] is the sub-list for method input_type
 	18, // [18:18] is the sub-list for extension type_name
 	18, // [18:18] is the sub-list for extension extendee
 	0,  // [0:18] is the sub-list for field type_name
@@ -1780,7 +1895,7 @@ func file_pkg_api_runtime_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_api_runtime_v1_api_proto_rawDesc), len(file_pkg_api_runtime_v1_api_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   32,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   3,
 		},
