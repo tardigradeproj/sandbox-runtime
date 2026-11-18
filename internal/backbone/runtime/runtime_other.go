@@ -36,6 +36,10 @@ func (r *Runtime) StopSandbox(context.Context, *v1.StopSandboxRequest) (*v1.Stop
 	return nil, status.Error(codes.Unimplemented, "stop sandbox: firecracker is only supported on linux")
 }
 
+func (r *Runtime) RemoveSandbox(context.Context, *v1.RemoveSandboxRequest) (*v1.RemoveSandboxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "remove sandbox: firecracker is only supported on linux")
+}
+
 func (r *Runtime) CheckpointSandbox(context.Context, *v1.CheckpointSandboxRequest) (*v1.CheckpointSandboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "checkpoint sandbox: firecracker is only supported on linux")
 }
