@@ -16,6 +16,8 @@
 syntax = "proto3";
 package runtime.v1;
 
+import "google/protobuf/struct.proto";
+
 option go_package = "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1;v1";
 
 // RuntimeService defines the public APIs for managing sandbox lifecycle. It
@@ -24,6 +26,11 @@ service RuntimeService {
   rpc CreateSandbox(CreateSandboxRequest) returns (CreateSandboxResponse) {}
   rpc StartSandbox(StartSandboxRequest) returns (StartSandboxResponse) {}
 
+  // UpdateSandboxUserData replaces a running sandbox's user data,
+  // delivered to the guest over the same sandbox metadata endpoint
+  // SandboxConfig.user_data used at creation.
+  rpc UpdateSandboxUserData(UpdateSandboxUserDataRequest) returns (UpdateSandboxUserDataResponse) {}
+
   // StopSandbox pauses a running sandbox's vCPUs. The process keeps
   // running and its memory/CPU allocation is not released. Idempotent:
   // stopping an already-stopped sandbox succeeds. See ResumeSandbox to
@@ -31,11 +38,10 @@ service RuntimeService {
   rpc StopSandbox(StopSandboxRequest) returns (StopSandboxResponse) {}
 
   // RemoveSandbox asks a running sandbox's guest to shut down
-  // gracefully (SendCtrlAltDel over its API socket), then releases
-  // what CreateSandbox allocated for it, except its network
-  // namespace/tap device -- see DetachNetwork for that. See
-  // RemoveSandboxRequest.force for what happens if the guest doesn't
-  // shut down on its own in time.
+  // gracefully, then releases what CreateSandbox allocated for it,
+  // except its network namespace/tap device -- see DetachNetwork for
+  // that. See RemoveSandboxRequest.force for what happens if the
+  // guest doesn't shut down on its own in time.
   rpc RemoveSandbox(RemoveSandboxRequest) returns (RemoveSandboxResponse) {}
 
   // CheckpointSandbox captures a stopped sandbox's VM state to disk,
@@ -84,12 +90,11 @@ message AttachNetworkRequest {
 }
 
 message AttachNetworkResponse {
-  // NetnsPath is the network namespace to run the sandbox in, e.g. for
-  // jailer's --netns.
+  // NetnsPath is the network namespace to run the sandbox in.
   string netns_path = 1;
 
   // TapDevice is the tap device created inside that namespace for the
-  // guest's NIC, e.g. for Firecracker's NetworkInterface.host_dev_name.
+  // guest's NIC.
   string tap_device = 2;
 
   // IpAddress is the address assigned to the sandbox, in CIDR form (e.g.
@@ -205,9 +210,8 @@ message SandboxResources {
   int64 storage_bytes = 3;
 }
 
-// RootFSMount describes how a rootfs is attached to a sandbox as a block
-// device. Field names and semantics follow Firecracker's Drive model, the
-// first runtime this API targets.
+// RootFSMount describes how a rootfs is attached to a sandbox as a
+// block device.
 message RootFSMount {
   // Spec identifies the rootfs to attach. It must already be present
   // locally (see RootFSService.PullRootFS).
@@ -227,9 +231,14 @@ message RootFSMount {
   string partuuid = 4;
 }
 
-// BootConfig describes how to boot a sandbox's guest kernel. Field names
-// and semantics follow Firecracker's BootSource model, the first runtime
-// this API targets.
+// SandboxUserData is caller-supplied data made available to the
+// guest at boot via the runtime's own sandbox metadata endpoint.
+message SandboxUserData {
+  google.protobuf.Struct system = 1;
+  string boot = 2;
+}
+
+// BootConfig describes how to boot a sandbox's guest kernel.
 message BootConfig {
   // KernelImagePath is the path to the uncompressed guest kernel image.
   string kernel_image_path = 1;
@@ -267,6 +276,8 @@ message SandboxConfig {
 
   map<string, string> labels = 5;
   map<string, string> annotations = 6;
+
+  SandboxUserData user_data = 8;
 }
 
 message CreateSandboxRequest {
@@ -282,6 +293,13 @@ message StartSandboxRequest {
 }
 
 message StartSandboxResponse {}
+
+message UpdateSandboxUserDataRequest {
+  string sandbox_id = 1;
+  SandboxUserData user_data = 2;
+}
+
+message UpdateSandboxUserDataResponse {}
 
 message StopSandboxRequest {
   string sandbox_id = 1;

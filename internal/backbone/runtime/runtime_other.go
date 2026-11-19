@@ -32,6 +32,10 @@ func (r *Runtime) StartSandbox(context.Context, *v1.StartSandboxRequest) (*v1.St
 	return nil, status.Error(codes.Unimplemented, "start sandbox: firecracker is only supported on linux")
 }
 
+func (r *Runtime) UpdateSandboxUserData(context.Context, *v1.UpdateSandboxUserDataRequest) (*v1.UpdateSandboxUserDataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "update sandbox user data: firecracker is only supported on linux")
+}
+
 func (r *Runtime) StopSandbox(context.Context, *v1.StopSandboxRequest) (*v1.StopSandboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "stop sandbox: firecracker is only supported on linux")
 }

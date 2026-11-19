@@ -117,6 +117,12 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	if image == "" {
 		return nil, status.Error(codes.InvalidArgument, "config.rootfs.spec.image must be set")
 	}
+
+	userData := config.GetUserData()
+	if userData != nil && !r.cfg.Runtime.Firecracker.Jailer.Enabled {
+		return nil, status.Error(codes.FailedPrecondition, "config.user_data requires jailer to be enabled")
+	}
+
 	log.WithField(obs.SandboxImage, image).Info("creating sandbox")
 
 	entry, ok, err := r.store.Resolve(image)
@@ -249,6 +255,13 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	}
 	if err := spawnSandbox(ctx, log, &cu, machine, socketPath); err != nil {
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+	}
+
+	if userData != nil {
+		if err := machine.SetMetadata(ctx, sandboxUserDataMetadata(userData)); err != nil {
+			log.WithError(err).Error("create sandbox: failed to set mmds user data")
+			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
+		}
 	}
 	cu.Release()
 
@@ -487,7 +500,9 @@ func (r *Runtime) jailSandbox(fc cfg.Firecracker, sandboxID, sandboxDir, overlay
 		StaticConfiguration: &firecracker.StaticNetworkConfiguration{
 			HostDevName: network.TapDeviceName,
 		},
+		AllowMMDS: true,
 	}}
+	machineCfg.MmdsVersion = firecracker.MMDSv2
 	machineCfg.JailerCfg = buildJailerConfig(fc, uid, gid, sandboxID, kernelImagePath, consoleLog)
 
 	// Chroot-relative: the SDK's jail() rewrites this to the real
@@ -586,6 +601,54 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 
 	log.Info("sandbox started")
 	return &v1.StartSandboxResponse{}, nil
+}
+
+// sandboxUserDataMetadata converts userData into the map the guest's
+// metadata endpoint serves
+func sandboxUserDataMetadata(userData *v1.SandboxUserData) map[string]any {
+	metadata := map[string]any{}
+	if s := userData.GetBoot(); s != "" {
+		metadata["boot"] = s
+	}
+	if m := userData.GetSystem(); m != nil {
+		metadata["system"] = m.AsMap()
+	}
+	return metadata
+}
+
+// UpdateSandboxUserData replaces a running sandbox's user data over
+// its API socket, the same reconnect-by-socket pattern as
+// StartSandbox/StopSandbox -- the guest's next read of its metadata
+// endpoint reflects it immediately, no restart required.
+func (r *Runtime) UpdateSandboxUserData(ctx context.Context, req *v1.UpdateSandboxUserDataRequest) (*v1.UpdateSandboxUserDataResponse, error) {
+	sandboxID := req.GetSandboxId()
+	if sandboxID == "" {
+		return nil, status.Error(codes.InvalidArgument, "sandbox_id must be set")
+	}
+	log := logrus.WithField(obs.SandboxID, sandboxID)
+	log.Info("updating sandbox user data")
+
+	fc := r.cfg.Runtime.Firecracker
+	if !fc.Jailer.Enabled {
+		return nil, status.Error(codes.FailedPrecondition, "update sandbox user data requires jailer to be enabled")
+	}
+	socketPath := jailerSocketPath(fc, sandboxID)
+	if _, err := os.Stat(socketPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "sandbox %q not found", sandboxID)
+		}
+		log.WithError(err).Error("update sandbox user data: failed to stat socket")
+		return nil, status.Errorf(codes.Internal, "update sandbox user data: %v", err)
+	}
+
+	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	if _, err := client.PutMmds(ctx, sandboxUserDataMetadata(req.GetUserData())); err != nil {
+		log.WithError(err).Error("update sandbox user data: failed to set user data")
+		return nil, status.Errorf(codes.Internal, "update sandbox user data: %v", err)
+	}
+
+	log.Info("sandbox user data updated")
+	return &v1.UpdateSandboxUserDataResponse{}, nil
 }
 
 // StopSandbox pauses a running sandbox's vCPUs over its API socket,
