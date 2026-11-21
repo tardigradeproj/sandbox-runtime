@@ -48,14 +48,13 @@ func TestSidecarRoundTrip(t *testing.T) {
 		ID:   "chk-1",
 		Name: "nightly build",
 		Config: &v1.SandboxConfig{
-			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1", Name: "sandbox"},
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1", Name: "sandbox", Labels: map[string]string{"env": "test"}},
 			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "alpine:3.19"}, IsRootDevice: true}},
 			Resources: &v1.SandboxResources{
 				Cpu:          1,
 				MemoryBytes:  512 << 20,
 				StorageBytes: 256 << 20,
 			},
-			Labels: map[string]string{"env": "test"},
 		},
 		IPAddress: "10.200.5.14/24",
 		UID:       100001,
@@ -79,7 +78,7 @@ func TestSidecarRoundTrip(t *testing.T) {
 	assert.Equal(t, "alpine:3.19", got.Config.GetRootfs().GetSpec().GetImage())
 	assert.True(t, got.Config.GetRootfs().GetIsRootDevice())
 	assert.Equal(t, int64(512<<20), got.Config.GetResources().GetMemoryBytes())
-	assert.Equal(t, "test", got.Config.GetLabels()["env"])
+	assert.Equal(t, "test", got.Config.GetMetadata().GetLabels()["env"])
 }
 
 func TestReadSidecarMissingFile(t *testing.T) {

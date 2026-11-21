@@ -200,6 +200,8 @@ message SandboxMetadata {
 
   // Uid is a unique, caller-assigned identifier for the sandbox.
   string uid = 2;
+
+  map<string, string> labels = 3;
 }
 
 // SandboxResources describes the resources to reserve for a sandbox.
@@ -277,9 +279,6 @@ message SandboxConfig {
   // Resources are the resources to reserve for the sandbox, allocated when
   // the sandbox is run.
   SandboxResources resources = 4;
-
-  map<string, string> labels = 5;
-  map<string, string> annotations = 6;
 
   SandboxUserData user_data = 8;
 }
