@@ -743,7 +743,7 @@ func matchesFilter(sandbox *v1.SandboxTrait, filter *v1.SandboxFilter) bool {
 	}
 
 	for k, v := range filter.LabelSelector {
-		if sandbox.Config.Labels[k] != v {
+		if sandbox.Config.Metadata.Labels[k] != v {
 			return false
 		}
 	}

@@ -848,7 +848,8 @@ type SandboxMetadata struct {
 	// unique.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Uid is a unique, caller-assigned identifier for the sandbox.
-	Uid           string `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid,omitempty"`
+	Uid           string            `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid,omitempty"`
+	Labels        map[string]string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -895,6 +896,13 @@ func (x *SandboxMetadata) GetUid() string {
 		return x.Uid
 	}
 	return ""
+}
+
+func (x *SandboxMetadata) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
 }
 
 // SandboxResources describes the resources to reserve for a sandbox.
@@ -1174,8 +1182,6 @@ type SandboxConfig struct {
 	// Resources are the resources to reserve for the sandbox, allocated when
 	// the sandbox is run.
 	Resources     *SandboxResources `protobuf:"bytes,4,opt,name=resources,proto3" json:"resources,omitempty"`
-	Labels        map[string]string `protobuf:"bytes,5,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Annotations   map[string]string `protobuf:"bytes,6,rep,name=annotations,proto3" json:"annotations,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	UserData      *SandboxUserData  `protobuf:"bytes,8,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1253,20 +1259,6 @@ func (x *SandboxConfig) GetBoot() *BootConfig {
 func (x *SandboxConfig) GetResources() *SandboxResources {
 	if x != nil {
 		return x.Resources
-	}
-	return nil
-}
-
-func (x *SandboxConfig) GetLabels() map[string]string {
-	if x != nil {
-		return x.Labels
-	}
-	return nil
-}
-
-func (x *SandboxConfig) GetAnnotations() map[string]string {
-	if x != nil {
-		return x.Annotations
 	}
 	return nil
 }
@@ -2226,10 +2218,14 @@ const file_pkg_api_runtime_v1_api_proto_rawDesc = "" +
 	"rootfs_ref\x18\x01 \x01(\tR\trootfsRef\"A\n" +
 	"\x13RemoveRootFSRequest\x12*\n" +
 	"\x04spec\x18\x01 \x01(\v2\x16.runtime.v1.RootFSSpecR\x04spec\"\x16\n" +
-	"\x14RemoveRootFSResponse\"7\n" +
+	"\x14RemoveRootFSResponse\"\xb3\x01\n" +
 	"\x0fSandboxMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03uid\x18\x02 \x01(\tR\x03uid\"l\n" +
+	"\x03uid\x18\x02 \x01(\tR\x03uid\x12?\n" +
+	"\x06labels\x18\x03 \x03(\v2'.runtime.v1.SandboxMetadata.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"l\n" +
 	"\x10SandboxResources\x12\x10\n" +
 	"\x03cpu\x18\x01 \x01(\x01R\x03cpu\x12!\n" +
 	"\fmemory_bytes\x18\x02 \x01(\x03R\vmemoryBytes\x12#\n" +
@@ -2248,22 +2244,14 @@ const file_pkg_api_runtime_v1_api_proto_rawDesc = "" +
 	"\x11kernel_image_path\x18\x01 \x01(\tR\x0fkernelImagePath\x12\x1f\n" +
 	"\vinitrd_path\x18\x02 \x01(\tR\n" +
 	"initrdPath\x12\x1b\n" +
-	"\tboot_args\x18\x03 \x01(\tR\bbootArgs\"\xdd\x04\n" +
+	"\tboot_args\x18\x03 \x01(\tR\bbootArgs\"\xd5\x02\n" +
 	"\rSandboxConfig\x127\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x1b.runtime.v1.SandboxMetadataR\bmetadata\x121\n" +
 	"\x06rootfs\x18\x02 \x01(\v2\x17.runtime.v1.RootFSMountH\x00R\x06rootfs\x12'\n" +
 	"\x0echeckpoint_ref\x18\a \x01(\tH\x00R\rcheckpointRef\x12*\n" +
 	"\x04boot\x18\x03 \x01(\v2\x16.runtime.v1.BootConfigR\x04boot\x12:\n" +
-	"\tresources\x18\x04 \x01(\v2\x1c.runtime.v1.SandboxResourcesR\tresources\x12=\n" +
-	"\x06labels\x18\x05 \x03(\v2%.runtime.v1.SandboxConfig.LabelsEntryR\x06labels\x12L\n" +
-	"\vannotations\x18\x06 \x03(\v2*.runtime.v1.SandboxConfig.AnnotationsEntryR\vannotations\x128\n" +
-	"\tuser_data\x18\b \x01(\v2\x1b.runtime.v1.SandboxUserDataR\buserData\x1a9\n" +
-	"\vLabelsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a>\n" +
-	"\x10AnnotationsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
+	"\tresources\x18\x04 \x01(\v2\x1c.runtime.v1.SandboxResourcesR\tresources\x128\n" +
+	"\tuser_data\x18\b \x01(\v2\x1b.runtime.v1.SandboxUserDataR\buserDataB\r\n" +
 	"\vboot_source\"/\n" +
 	"\tUserGroup\x12\x10\n" +
 	"\x03uid\x18\x01 \x01(\x04R\x03uid\x12\x10\n" +
@@ -2355,7 +2343,7 @@ func file_pkg_api_runtime_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var file_pkg_api_runtime_v1_api_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pkg_api_runtime_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_pkg_api_runtime_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_pkg_api_runtime_v1_api_proto_goTypes = []any{
 	(SandboxStateValue)(0),                // 0: runtime.v1.SandboxStateValue
 	(*AttachNetworkRequest)(nil),          // 1: runtime.v1.AttachNetworkRequest
@@ -2399,10 +2387,9 @@ var file_pkg_api_runtime_v1_api_proto_goTypes = []any{
 	(*CheckpointSandboxResponse)(nil),     // 39: runtime.v1.CheckpointSandboxResponse
 	nil,                                   // 40: runtime.v1.RootFSSpec.AnnotationsEntry
 	nil,                                   // 41: runtime.v1.RootFSStatusResponse.InfoEntry
-	nil,                                   // 42: runtime.v1.SandboxConfig.LabelsEntry
-	nil,                                   // 43: runtime.v1.SandboxConfig.AnnotationsEntry
-	nil,                                   // 44: runtime.v1.SandboxFilter.LabelSelectorEntry
-	(*structpb.Struct)(nil),               // 45: google.protobuf.Struct
+	nil,                                   // 42: runtime.v1.SandboxMetadata.LabelsEntry
+	nil,                                   // 43: runtime.v1.SandboxFilter.LabelSelectorEntry
+	(*structpb.Struct)(nil),               // 44: google.protobuf.Struct
 }
 var file_pkg_api_runtime_v1_api_proto_depIdxs = []int32{
 	40, // 0: runtime.v1.RootFSSpec.annotations:type_name -> runtime.v1.RootFSSpec.AnnotationsEntry
@@ -2415,56 +2402,55 @@ var file_pkg_api_runtime_v1_api_proto_depIdxs = []int32{
 	41, // 7: runtime.v1.RootFSStatusResponse.info:type_name -> runtime.v1.RootFSStatusResponse.InfoEntry
 	5,  // 8: runtime.v1.PullRootFSRequest.spec:type_name -> runtime.v1.RootFSSpec
 	5,  // 9: runtime.v1.RemoveRootFSRequest.spec:type_name -> runtime.v1.RootFSSpec
-	5,  // 10: runtime.v1.RootFSMount.spec:type_name -> runtime.v1.RootFSSpec
-	45, // 11: runtime.v1.SandboxUserData.system:type_name -> google.protobuf.Struct
-	16, // 12: runtime.v1.SandboxConfig.metadata:type_name -> runtime.v1.SandboxMetadata
-	18, // 13: runtime.v1.SandboxConfig.rootfs:type_name -> runtime.v1.RootFSMount
-	20, // 14: runtime.v1.SandboxConfig.boot:type_name -> runtime.v1.BootConfig
-	17, // 15: runtime.v1.SandboxConfig.resources:type_name -> runtime.v1.SandboxResources
-	42, // 16: runtime.v1.SandboxConfig.labels:type_name -> runtime.v1.SandboxConfig.LabelsEntry
-	43, // 17: runtime.v1.SandboxConfig.annotations:type_name -> runtime.v1.SandboxConfig.AnnotationsEntry
-	19, // 18: runtime.v1.SandboxConfig.user_data:type_name -> runtime.v1.SandboxUserData
-	21, // 19: runtime.v1.SandboxTrait.config:type_name -> runtime.v1.SandboxConfig
-	22, // 20: runtime.v1.SandboxTrait.user:type_name -> runtime.v1.UserGroup
-	23, // 21: runtime.v1.SandboxTrait.network:type_name -> runtime.v1.SandboxNetwork
-	0,  // 22: runtime.v1.SandboxTrait.state:type_name -> runtime.v1.SandboxStateValue
-	0,  // 23: runtime.v1.SandboxFilter.state:type_name -> runtime.v1.SandboxStateValue
-	44, // 24: runtime.v1.SandboxFilter.label_selector:type_name -> runtime.v1.SandboxFilter.LabelSelectorEntry
-	25, // 25: runtime.v1.ListSandboxRequest.filter:type_name -> runtime.v1.SandboxFilter
-	24, // 26: runtime.v1.ListSandboxResponse.sandbox:type_name -> runtime.v1.SandboxTrait
-	21, // 27: runtime.v1.CreateSandboxRequest.config:type_name -> runtime.v1.SandboxConfig
-	19, // 28: runtime.v1.UpdateSandboxUserDataRequest.user_data:type_name -> runtime.v1.SandboxUserData
-	28, // 29: runtime.v1.RuntimeService.CreateSandbox:input_type -> runtime.v1.CreateSandboxRequest
-	30, // 30: runtime.v1.RuntimeService.StartSandbox:input_type -> runtime.v1.StartSandboxRequest
-	26, // 31: runtime.v1.RuntimeService.ListSandbox:input_type -> runtime.v1.ListSandboxRequest
-	32, // 32: runtime.v1.RuntimeService.UpdateSandboxUserData:input_type -> runtime.v1.UpdateSandboxUserDataRequest
-	34, // 33: runtime.v1.RuntimeService.StopSandbox:input_type -> runtime.v1.StopSandboxRequest
-	36, // 34: runtime.v1.RuntimeService.RemoveSandbox:input_type -> runtime.v1.RemoveSandboxRequest
-	38, // 35: runtime.v1.RuntimeService.CheckpointSandbox:input_type -> runtime.v1.CheckpointSandboxRequest
-	8,  // 36: runtime.v1.RootFSService.ListRootFS:input_type -> runtime.v1.ListRootFSRequest
-	10, // 37: runtime.v1.RootFSService.RootFSStatus:input_type -> runtime.v1.RootFSStatusRequest
-	12, // 38: runtime.v1.RootFSService.PullRootFS:input_type -> runtime.v1.PullRootFSRequest
-	14, // 39: runtime.v1.RootFSService.RemoveRootFS:input_type -> runtime.v1.RemoveRootFSRequest
-	1,  // 40: runtime.v1.NetworkService.AttachNetwork:input_type -> runtime.v1.AttachNetworkRequest
-	3,  // 41: runtime.v1.NetworkService.DetachNetwork:input_type -> runtime.v1.DetachNetworkRequest
-	29, // 42: runtime.v1.RuntimeService.CreateSandbox:output_type -> runtime.v1.CreateSandboxResponse
-	31, // 43: runtime.v1.RuntimeService.StartSandbox:output_type -> runtime.v1.StartSandboxResponse
-	27, // 44: runtime.v1.RuntimeService.ListSandbox:output_type -> runtime.v1.ListSandboxResponse
-	33, // 45: runtime.v1.RuntimeService.UpdateSandboxUserData:output_type -> runtime.v1.UpdateSandboxUserDataResponse
-	35, // 46: runtime.v1.RuntimeService.StopSandbox:output_type -> runtime.v1.StopSandboxResponse
-	37, // 47: runtime.v1.RuntimeService.RemoveSandbox:output_type -> runtime.v1.RemoveSandboxResponse
-	39, // 48: runtime.v1.RuntimeService.CheckpointSandbox:output_type -> runtime.v1.CheckpointSandboxResponse
-	9,  // 49: runtime.v1.RootFSService.ListRootFS:output_type -> runtime.v1.ListRootFSResponse
-	11, // 50: runtime.v1.RootFSService.RootFSStatus:output_type -> runtime.v1.RootFSStatusResponse
-	13, // 51: runtime.v1.RootFSService.PullRootFS:output_type -> runtime.v1.PullRootFSResponse
-	15, // 52: runtime.v1.RootFSService.RemoveRootFS:output_type -> runtime.v1.RemoveRootFSResponse
-	2,  // 53: runtime.v1.NetworkService.AttachNetwork:output_type -> runtime.v1.AttachNetworkResponse
-	4,  // 54: runtime.v1.NetworkService.DetachNetwork:output_type -> runtime.v1.DetachNetworkResponse
-	42, // [42:55] is the sub-list for method output_type
-	29, // [29:42] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	42, // 10: runtime.v1.SandboxMetadata.labels:type_name -> runtime.v1.SandboxMetadata.LabelsEntry
+	5,  // 11: runtime.v1.RootFSMount.spec:type_name -> runtime.v1.RootFSSpec
+	44, // 12: runtime.v1.SandboxUserData.system:type_name -> google.protobuf.Struct
+	16, // 13: runtime.v1.SandboxConfig.metadata:type_name -> runtime.v1.SandboxMetadata
+	18, // 14: runtime.v1.SandboxConfig.rootfs:type_name -> runtime.v1.RootFSMount
+	20, // 15: runtime.v1.SandboxConfig.boot:type_name -> runtime.v1.BootConfig
+	17, // 16: runtime.v1.SandboxConfig.resources:type_name -> runtime.v1.SandboxResources
+	19, // 17: runtime.v1.SandboxConfig.user_data:type_name -> runtime.v1.SandboxUserData
+	21, // 18: runtime.v1.SandboxTrait.config:type_name -> runtime.v1.SandboxConfig
+	22, // 19: runtime.v1.SandboxTrait.user:type_name -> runtime.v1.UserGroup
+	23, // 20: runtime.v1.SandboxTrait.network:type_name -> runtime.v1.SandboxNetwork
+	0,  // 21: runtime.v1.SandboxTrait.state:type_name -> runtime.v1.SandboxStateValue
+	0,  // 22: runtime.v1.SandboxFilter.state:type_name -> runtime.v1.SandboxStateValue
+	43, // 23: runtime.v1.SandboxFilter.label_selector:type_name -> runtime.v1.SandboxFilter.LabelSelectorEntry
+	25, // 24: runtime.v1.ListSandboxRequest.filter:type_name -> runtime.v1.SandboxFilter
+	24, // 25: runtime.v1.ListSandboxResponse.sandbox:type_name -> runtime.v1.SandboxTrait
+	21, // 26: runtime.v1.CreateSandboxRequest.config:type_name -> runtime.v1.SandboxConfig
+	19, // 27: runtime.v1.UpdateSandboxUserDataRequest.user_data:type_name -> runtime.v1.SandboxUserData
+	28, // 28: runtime.v1.RuntimeService.CreateSandbox:input_type -> runtime.v1.CreateSandboxRequest
+	30, // 29: runtime.v1.RuntimeService.StartSandbox:input_type -> runtime.v1.StartSandboxRequest
+	26, // 30: runtime.v1.RuntimeService.ListSandbox:input_type -> runtime.v1.ListSandboxRequest
+	32, // 31: runtime.v1.RuntimeService.UpdateSandboxUserData:input_type -> runtime.v1.UpdateSandboxUserDataRequest
+	34, // 32: runtime.v1.RuntimeService.StopSandbox:input_type -> runtime.v1.StopSandboxRequest
+	36, // 33: runtime.v1.RuntimeService.RemoveSandbox:input_type -> runtime.v1.RemoveSandboxRequest
+	38, // 34: runtime.v1.RuntimeService.CheckpointSandbox:input_type -> runtime.v1.CheckpointSandboxRequest
+	8,  // 35: runtime.v1.RootFSService.ListRootFS:input_type -> runtime.v1.ListRootFSRequest
+	10, // 36: runtime.v1.RootFSService.RootFSStatus:input_type -> runtime.v1.RootFSStatusRequest
+	12, // 37: runtime.v1.RootFSService.PullRootFS:input_type -> runtime.v1.PullRootFSRequest
+	14, // 38: runtime.v1.RootFSService.RemoveRootFS:input_type -> runtime.v1.RemoveRootFSRequest
+	1,  // 39: runtime.v1.NetworkService.AttachNetwork:input_type -> runtime.v1.AttachNetworkRequest
+	3,  // 40: runtime.v1.NetworkService.DetachNetwork:input_type -> runtime.v1.DetachNetworkRequest
+	29, // 41: runtime.v1.RuntimeService.CreateSandbox:output_type -> runtime.v1.CreateSandboxResponse
+	31, // 42: runtime.v1.RuntimeService.StartSandbox:output_type -> runtime.v1.StartSandboxResponse
+	27, // 43: runtime.v1.RuntimeService.ListSandbox:output_type -> runtime.v1.ListSandboxResponse
+	33, // 44: runtime.v1.RuntimeService.UpdateSandboxUserData:output_type -> runtime.v1.UpdateSandboxUserDataResponse
+	35, // 45: runtime.v1.RuntimeService.StopSandbox:output_type -> runtime.v1.StopSandboxResponse
+	37, // 46: runtime.v1.RuntimeService.RemoveSandbox:output_type -> runtime.v1.RemoveSandboxResponse
+	39, // 47: runtime.v1.RuntimeService.CheckpointSandbox:output_type -> runtime.v1.CheckpointSandboxResponse
+	9,  // 48: runtime.v1.RootFSService.ListRootFS:output_type -> runtime.v1.ListRootFSResponse
+	11, // 49: runtime.v1.RootFSService.RootFSStatus:output_type -> runtime.v1.RootFSStatusResponse
+	13, // 50: runtime.v1.RootFSService.PullRootFS:output_type -> runtime.v1.PullRootFSResponse
+	15, // 51: runtime.v1.RootFSService.RemoveRootFS:output_type -> runtime.v1.RemoveRootFSResponse
+	2,  // 52: runtime.v1.NetworkService.AttachNetwork:output_type -> runtime.v1.AttachNetworkResponse
+	4,  // 53: runtime.v1.NetworkService.DetachNetwork:output_type -> runtime.v1.DetachNetworkResponse
+	41, // [41:54] is the sub-list for method output_type
+	28, // [28:41] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_pkg_api_runtime_v1_api_proto_init() }
@@ -2482,7 +2468,7 @@ func file_pkg_api_runtime_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_api_runtime_v1_api_proto_rawDesc), len(file_pkg_api_runtime_v1_api_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   44,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   3,
 		},
