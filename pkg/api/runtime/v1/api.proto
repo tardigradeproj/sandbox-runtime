@@ -17,6 +17,7 @@ syntax = "proto3";
 package runtime.v1;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1;v1";
 
@@ -52,6 +53,10 @@ service RuntimeService {
   // so CreateSandbox can later resume a new sandbox from it. Requires
   // the sandbox to already be stopped; fails if it's still running.
   rpc CheckpointSandbox(CheckpointSandboxRequest) returns (CheckpointSandboxResponse) {}
+
+  // ListCheckpoint lists the checkpoints known to the runtime,
+  // optionally narrowed by filter.
+  rpc ListCheckpoint(ListCheckpointRequest) returns (ListCheckpointResponse) {}
 }
 
 // RootFSService defines the public APIs for managing sandbox root
@@ -391,4 +396,40 @@ message CheckpointSandboxResponse {
   // CheckpointRef identifies the checkpoint for a later CreateSandbox
   // call -- the same role RootfsRef plays for PullRootFS.
   string checkpoint_ref = 1;
+}
+
+// Checkpoint is a sandbox checkpoint known to the runtime, as
+// captured by CheckpointSandbox.
+message Checkpoint {
+  // CheckpointRef identifies this checkpoint for a later CreateSandbox
+  // call -- the same ref CheckpointSandboxResponse returned.
+  string checkpoint_ref = 1;
+
+  // Name is the optional human label given to CheckpointSandbox.
+  string name = 2;
+
+  // Config is the sandbox config this checkpoint was taken from.
+  SandboxConfig config = 3;
+
+  // Network is the sandbox's networking at checkpoint time.
+  SandboxNetwork network = 4;
+
+  // User is the jailer uid/gid the sandbox ran under.
+  UserGroup user = 5;
+
+  // CreatedAt is when the checkpoint was taken.
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// CheckpointFilter narrows a ListCheckpoint call.
+message CheckpointFilter {
+  string checkpoint_ref = 1;
+}
+
+message ListCheckpointRequest {
+  CheckpointFilter filter = 1;
+}
+
+message ListCheckpointResponse {
+  repeated Checkpoint checkpoint = 1;
 }

@@ -40,6 +40,7 @@ import (
 	obs "github.com/tardigradeproj/sandbox-runtime/pkg/observability"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const firecrackerSocketName = "firecracker.sock"
@@ -762,7 +763,7 @@ func (r *Runtime) StopSandbox(ctx context.Context, req *v1.StopSandboxRequest) (
 	log.Info("stopping sandbox")
 
 	fc := r.cfg.Runtime.Firecracker
-	socketPath := filepath.Join(r.cfg.State, sandboxID, firecrackerSocketName)
+	socketPath := filepath.Join(sandboxStateDir(r.cfg.State, sandboxID), firecrackerSocketName)
 	if fc.Jailer.Enabled {
 		socketPath = jailerSocketPath(fc, sandboxID)
 	}
@@ -1024,6 +1025,57 @@ func (r *Runtime) CheckpointSandbox(ctx context.Context, req *v1.CheckpointSandb
 	cu.Release()
 	log.WithField(obs.CheckPointID, uid).Info("sandbox checkpointed")
 	return &v1.CheckpointSandboxResponse{CheckpointRef: uid}, nil
+}
+
+// ListCheckpoint lists the checkpoints known to the runtime by
+// scanning cfg.Checkpoint.Dir, each subdirectory is one checkpoint,
+// named after its own ref (see newCheckpointDir).
+func (r *Runtime) ListCheckpoint(_ context.Context, req *v1.ListCheckpointRequest) (*v1.ListCheckpointResponse, error) {
+	filter := req.GetFilter()
+	log := logrus.WithField(obs.Operation, obs.OperationListCheckpoint)
+	log.Info("listing checkpoints")
+
+	entries, err := os.ReadDir(r.cfg.Checkpoint.Dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &v1.ListCheckpointResponse{}, nil
+		}
+		log.WithError(err).Error("list checkpoint: failed to read checkpoints")
+		return nil, status.Errorf(codes.Internal, "list checkpoint: %v", err)
+	}
+
+	var checkpoints []*v1.Checkpoint
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		checkpointRef := entry.Name()
+		if filter.GetCheckpointRef() != "" && checkpointRef != filter.GetCheckpointRef() {
+			continue
+		}
+
+		sidecar, err := readSidecar(checkpointDir(r.cfg.Checkpoint.Dir, checkpointRef))
+		if err != nil {
+			log.WithField(obs.CheckPointID, checkpointRef).
+				WithError(err).
+				Error("failed to read checkpoint sidecar. Checkpoints should always have a sidecar - backbone is in an inconsistent state")
+			continue
+		}
+
+		checkpoints = append(checkpoints, &v1.Checkpoint{
+			CheckpointRef: sidecar.ID,
+			Name:          sidecar.Name,
+			Config:        sidecar.Config,
+			Network:       &v1.SandboxNetwork{IpAddress: sidecar.IPAddress},
+			User: &v1.UserGroup{
+				Uid: uint64(sidecar.UID),
+				Gid: uint64(sidecar.GID),
+			},
+			CreatedAt: timestamppb.New(sidecar.CreatedAt),
+		})
+	}
+
+	return &v1.ListCheckpointResponse{Checkpoint: checkpoints}, nil
 }
 
 // moveFile copies src to dst then removes src -- a cross-filesystem-

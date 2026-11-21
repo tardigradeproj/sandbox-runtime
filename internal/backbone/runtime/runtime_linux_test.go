@@ -861,3 +861,104 @@ func TestRemoveSandboxForceKillsAfterTimeout(t *testing.T) {
 	_, err = os.Stat(filepath.Join(stateDir, "vm", sandboxID))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be removed")
 }
+
+// writeTestCheckpoint creates a checkpoint directory under checkpointsDir
+// with just enough sidecar state for ListCheckpoint to read back --
+// nothing else ListCheckpoint touches (snapshot/overlay files) is needed.
+func writeTestCheckpoint(t *testing.T, checkpointsDir, ref, name, ipAddress string, uid, gid int) {
+	t.Helper()
+	dir, err := newCheckpointDir(checkpointsDir, ref)
+	require.NoError(t, err)
+	require.NoError(t, writeSidecar(dir, Sidecar{
+		ID:        ref,
+		Name:      name,
+		Config:    &v1.SandboxConfig{Metadata: &v1.SandboxMetadata{Uid: "sandbox-1"}},
+		IPAddress: ipAddress,
+		UID:       uid,
+		GID:       gid,
+		CreatedAt: time.Now().UTC().Truncate(time.Second),
+	}))
+}
+
+func TestListCheckpointEmptyWhenDirMissing(t *testing.T) {
+	r, err := NewRuntime(&cfg.Settings{
+		State:      t.TempDir(),
+		Checkpoint: cfg.Checkpoint{Dir: filepath.Join(t.TempDir(), "checkpoints")},
+	}, nil)
+	require.NoError(t, err)
+
+	resp, err := r.ListCheckpoint(context.Background(), &v1.ListCheckpointRequest{})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetCheckpoint())
+}
+
+func TestListCheckpointListsCheckpoints(t *testing.T) {
+	checkpointsDir := t.TempDir()
+	r, err := NewRuntime(&cfg.Settings{
+		State:      t.TempDir(),
+		Checkpoint: cfg.Checkpoint{Dir: checkpointsDir},
+	}, nil)
+	require.NoError(t, err)
+
+	writeTestCheckpoint(t, checkpointsDir, "chk-1", "nightly", "10.200.5.14/24", 100001, 100001)
+	writeTestCheckpoint(t, checkpointsDir, "chk-2", "weekly", "10.200.5.15/24", 100002, 100002)
+
+	resp, err := r.ListCheckpoint(context.Background(), &v1.ListCheckpointRequest{})
+	require.NoError(t, err)
+	require.Len(t, resp.GetCheckpoint(), 2)
+
+	byRef := make(map[string]*v1.Checkpoint, len(resp.GetCheckpoint()))
+	for _, c := range resp.GetCheckpoint() {
+		byRef[c.GetCheckpointRef()] = c
+	}
+
+	chk1 := byRef["chk-1"]
+	require.NotNil(t, chk1)
+	assert.Equal(t, "nightly", chk1.GetName())
+	assert.Equal(t, "10.200.5.14/24", chk1.GetNetwork().GetIpAddress())
+	assert.EqualValues(t, 100001, chk1.GetUser().GetUid())
+	assert.EqualValues(t, 100001, chk1.GetUser().GetGid())
+	assert.Equal(t, "sandbox-1", chk1.GetConfig().GetMetadata().GetUid())
+	require.NotNil(t, chk1.GetCreatedAt())
+
+	require.NotNil(t, byRef["chk-2"])
+}
+
+func TestListCheckpointFiltersByCheckpointRef(t *testing.T) {
+	checkpointsDir := t.TempDir()
+	r, err := NewRuntime(&cfg.Settings{
+		State:      t.TempDir(),
+		Checkpoint: cfg.Checkpoint{Dir: checkpointsDir},
+	}, nil)
+	require.NoError(t, err)
+
+	writeTestCheckpoint(t, checkpointsDir, "chk-1", "nightly", "10.200.5.14/24", 100001, 100001)
+	writeTestCheckpoint(t, checkpointsDir, "chk-2", "weekly", "10.200.5.15/24", 100002, 100002)
+
+	resp, err := r.ListCheckpoint(context.Background(), &v1.ListCheckpointRequest{
+		Filter: &v1.CheckpointFilter{CheckpointRef: "chk-2"},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetCheckpoint(), 1)
+	assert.Equal(t, "chk-2", resp.GetCheckpoint()[0].GetCheckpointRef())
+}
+
+// TestListCheckpointSkipsEntryMissingSidecar exercises the "backbone is
+// in an inconsistent state" path: an entry under cfg.Checkpoint.Dir with
+// no sidecar.json is logged and skipped rather than failing the whole call.
+func TestListCheckpointSkipsEntryMissingSidecar(t *testing.T) {
+	checkpointsDir := t.TempDir()
+	r, err := NewRuntime(&cfg.Settings{
+		State:      t.TempDir(),
+		Checkpoint: cfg.Checkpoint{Dir: checkpointsDir},
+	}, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, os.Mkdir(filepath.Join(checkpointsDir, "broken"), 0o755))
+	writeTestCheckpoint(t, checkpointsDir, "chk-1", "nightly", "10.200.5.14/24", 100001, 100001)
+
+	resp, err := r.ListCheckpoint(context.Background(), &v1.ListCheckpointRequest{})
+	require.NoError(t, err)
+	require.Len(t, resp.GetCheckpoint(), 1)
+	assert.Equal(t, "chk-1", resp.GetCheckpoint()[0].GetCheckpointRef())
+}
