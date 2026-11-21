@@ -47,3 +47,6 @@ func (r *Runtime) RemoveSandbox(context.Context, *v1.RemoveSandboxRequest) (*v1.
 func (r *Runtime) CheckpointSandbox(context.Context, *v1.CheckpointSandboxRequest) (*v1.CheckpointSandboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "checkpoint sandbox: firecracker is only supported on linux")
 }
+func (r *Runtime) ListSandbox(context.Context, *v1.ListSandboxRequest) (*v1.ListSandboxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "list sandbox: firecracker is only supported on linux")
+}

@@ -55,6 +55,13 @@ func NewRuntime(cfg *cfg.Settings, store *store.Store) (*Runtime, error) {
 	}
 	r := &Runtime{cfg: cfg, store: store, fileSystemCheckpointCompression: comp}
 
+	// Per-sandbox state (overlay, sockets, logs, descriptor) lives
+	// under its own "vm" subdir, so it doesn't clutter cfg.State
+	// alongside the runtime's other state (jailer, jailer-ids, network).
+	if err := os.MkdirAll(filepath.Join(cfg.State, "vm"), 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create sandbox state dir: %w", err)
+	}
+
 	j := cfg.Runtime.Firecracker.Jailer
 	if j.Enabled {
 		// jailer requires --chroot-base-dir to already exist.

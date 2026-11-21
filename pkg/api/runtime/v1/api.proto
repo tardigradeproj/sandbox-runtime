@@ -26,6 +26,10 @@ service RuntimeService {
   rpc CreateSandbox(CreateSandboxRequest) returns (CreateSandboxResponse) {}
   rpc StartSandbox(StartSandboxRequest) returns (StartSandboxResponse) {}
 
+  // ListSandbox lists the sandboxes known to the runtime, optionally
+  // narrowed by filter.
+  rpc ListSandbox(ListSandboxRequest) returns (ListSandboxResponse) {}
+
   // UpdateSandboxUserData replaces a running sandbox's user data,
   // delivered to the guest over the same sandbox metadata endpoint
   // SandboxConfig.user_data used at creation.
@@ -278,6 +282,53 @@ message SandboxConfig {
   map<string, string> annotations = 6;
 
   SandboxUserData user_data = 8;
+}
+
+// UserGroup is the uid/gid a sandbox's microVM process runs as on the
+// host.
+message UserGroup {
+  uint64 uid = 1;
+  uint64 gid = 2;
+}
+
+// SandboxNetwork describes a sandbox's networking, as last reported
+// by AttachNetwork.
+message SandboxNetwork {
+  string ip_address = 1;
+}
+
+// SandboxStateValue is a sandbox's current run state.
+enum SandboxStateValue {
+  STATE_UNSPECIFIED = 0;
+  STATE_RUNNING = 1;
+  STATE_STOPPED = 2;
+  // STATE_PENDING: the microVM has been created but not started.
+  STATE_PENDING = 3;
+}
+
+// SandboxTrait is a sandbox's observed state, as reported by
+// ListSandbox.
+message SandboxTrait {
+  SandboxConfig config = 1;
+  UserGroup user = 2;
+  SandboxNetwork network = 3;
+  SandboxStateValue state = 4;
+}
+
+// SandboxFilter narrows a ListSandbox call.
+message SandboxFilter {
+  string uid = 1;
+  SandboxStateValue state = 2;
+  // label_selector are ANDed
+  map<string, string> label_selector = 3;
+}
+
+message ListSandboxRequest {
+  SandboxFilter filter = 1;
+}
+
+message ListSandboxResponse {
+  repeated SandboxTrait sandbox = 1;
 }
 
 message CreateSandboxRequest {

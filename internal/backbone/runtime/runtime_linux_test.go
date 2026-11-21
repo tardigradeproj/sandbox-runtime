@@ -323,7 +323,7 @@ func TestCreateSandboxCreatesOverlayImage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "sandbox-1", resp.GetSandboxId())
 
-	overlayPath := filepath.Join(stateDir, resp.GetSandboxId(), "overlay.ext4")
+	overlayPath := filepath.Join(stateDir, "vm", resp.GetSandboxId(), "overlay.ext4")
 	fi, err := os.Stat(overlayPath)
 	require.NoError(t, err)
 	assert.EqualValues(t, 4<<30, fi.Size())
@@ -333,7 +333,7 @@ func TestCreateSandboxCreatesOverlayImage(t *testing.T) {
 	args := strings.Fields(string(got))
 	assert.Equal(t, []string{"-q", "-m", "0", overlayPath}, args)
 
-	socketPath := filepath.Join(stateDir, "sandbox-1", "firecracker.sock")
+	socketPath := filepath.Join(stateDir, "vm", "sandbox-1", "firecracker.sock")
 	_, err = os.Stat(socketPath)
 	assert.NoError(t, err, "expected firecracker's api socket to exist")
 }
@@ -360,7 +360,7 @@ func TestCreateSandboxMkfsFailureSurfacesError(t *testing.T) {
 	assert.Equal(t, codes.Internal, status.Code(err))
 	assert.Contains(t, err.Error(), "boom")
 
-	_, err = os.Stat(filepath.Join(stateDir, "sandbox-1"))
+	_, err = os.Stat(filepath.Join(stateDir, "vm", "sandbox-1"))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be cleaned up after mkfs failure")
 }
 
@@ -385,7 +385,7 @@ func TestCreateSandboxCleansUpAfterFirecrackerConfigFailure(t *testing.T) {
 	// The firecracker process was already spawned (and configured the
 	// socket) by the time the PUT failed; cleanup must still remove the
 	// whole sandbox dir, not just leave the half-configured mess behind.
-	_, err = os.Stat(filepath.Join(stateDir, "sandbox-1"))
+	_, err = os.Stat(filepath.Join(stateDir, "vm", "sandbox-1"))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be cleaned up after a firecracker config failure")
 }
 
@@ -457,7 +457,7 @@ func TestCreateSandboxJailerEnabledAttemptsJailerSpawn(t *testing.T) {
 	// tap-ownership both ran and succeeded first.
 	assert.Contains(t, err.Error(), "definitely-not-a-real-jailer-binary")
 
-	_, err = os.Stat(filepath.Join(stateDir, sandboxID))
+	_, err = os.Stat(filepath.Join(stateDir, "vm", sandboxID))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be cleaned up after a jailer spawn failure")
 }
 
@@ -748,7 +748,7 @@ func TestRemoveSandboxSuccess(t *testing.T) {
 		return syscall.Kill(pid, 0) == syscall.ESRCH
 	}, time.Second, 10*time.Millisecond, "fake firecracker process still alive after RemoveSandbox")
 
-	_, err = os.Stat(filepath.Join(stateDir, sandboxID))
+	_, err = os.Stat(filepath.Join(stateDir, "vm", sandboxID))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be removed")
 }
 
@@ -816,7 +816,7 @@ func TestRemoveSandboxWithoutForceFailsIfStillRunning(t *testing.T) {
 
 	// Not force-killed, and not cleaned up.
 	assert.NoError(t, syscall.Kill(pid, 0), "fake firecracker process should still be alive")
-	_, err = os.Stat(filepath.Join(stateDir, sandboxID))
+	_, err = os.Stat(filepath.Join(stateDir, "vm", sandboxID))
 	assert.NoError(t, err, "expected sandbox dir to still exist")
 }
 
@@ -858,6 +858,6 @@ func TestRemoveSandboxForceKillsAfterTimeout(t *testing.T) {
 		return syscall.Kill(pid, 0) == syscall.ESRCH
 	}, time.Second, 10*time.Millisecond, "fake firecracker process still alive after RemoveSandbox")
 
-	_, err = os.Stat(filepath.Join(stateDir, sandboxID))
+	_, err = os.Stat(filepath.Join(stateDir, "vm", sandboxID))
 	assert.True(t, os.IsNotExist(err), "expected sandbox dir to be removed")
 }
