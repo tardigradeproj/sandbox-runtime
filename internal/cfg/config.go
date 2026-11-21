@@ -95,6 +95,33 @@ type GRPC struct {
 	// binds, e.g. "unix:///var/run/sandbox-runtime.sock" or
 	// "127.0.0.1:9090".
 	ListenAddress string `toml:"listen_address" default:"unix:///var/run/sandbox-runtime.sock"`
+
+	// TLS configures mTLS for a TCP ListenAddress. Ignored for a unix
+	// socket, which is already access-controlled by filesystem
+	// permissions. No default: TLS is off unless explicitly configured.
+	TLS TLS `toml:"tls"`
+}
+
+// TLS configures mTLS for the gRPC server's TCP listener: the
+// server's own identity (CertFile/KeyFile) and the CA that issues
+// client certificates it should trust (ClientCAFile). A client
+// presenting a cert that doesn't chain to ClientCAFile is refused;
+// any client that does is authorized -- see internal/server.
+type TLS struct {
+	// Enabled turns on mTLS. Requires CertFile, KeyFile, and
+	// ClientCAFile to all be set, and ListenAddress to be a TCP
+	// address -- the server refuses to start otherwise.
+	Enabled bool `toml:"enabled" default:"false"`
+
+	// CertFile and KeyFile are the server's own PEM-encoded
+	// certificate and private key.
+	CertFile string `toml:"cert_file"`
+	KeyFile  string `toml:"key_file"`
+
+	// ClientCAFile is the PEM-encoded CA bundle used to verify client
+	// certificates. Any client cert signed by this CA is authorized;
+	// identity beyond "signed by this CA" isn't checked.
+	ClientCAFile string `toml:"client_ca_file"`
 }
 
 // Logs holds settings for the runtime daemon's own logging.
