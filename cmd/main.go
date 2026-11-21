@@ -2,11 +2,14 @@ package main
 
 import (
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
+	"github.com/tardigradeproj/sandbox-runtime/internal/server"
 	"github.com/tardigradeproj/sandbox-runtime/pkg/observability"
 )
 
@@ -39,22 +42,26 @@ func newRootCmd() *cobra.Command {
 				observability.GRPCListenAddress: cfg.GRPC.ListenAddress,
 				observability.FirecrackerBin:    cfg.Runtime.Firecracker.Bin,
 			}).Info("runtime configuration")
-			return nil
+
+			s, lis, err := server.New(cfg)
+			if err != nil {
+				return err
+			}
+
+			sigCtx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			go func() {
+				<-sigCtx.Done()
+				logrus.Info("shutting down")
+				s.GracefulStop()
+			}()
+
+			logrus.WithField(observability.GRPCListenAddress, cfg.GRPC.ListenAddress).Info("serving")
+			return s.Serve(lis)
 		},
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
-
-	// TEMPORARY: manual-testing subcommands, remove before merging.
-	cmd.AddCommand(newValidatePullCmd())
-	cmd.AddCommand(newValidateCreateSandboxCmd())
-	cmd.AddCommand(newValidateStartSandboxCmd())
-	cmd.AddCommand(newValidateStopSandboxCmd())
-	cmd.AddCommand(newValidateRemoveSandboxCmd())
-	cmd.AddCommand(newValidateDetachNetworkCmd())
-	cmd.AddCommand(newValidateCheckpointSandboxCmd())
-	cmd.AddCommand(newValidateRestoreSandboxCmd())
-	cmd.AddCommand(newValidateRunSandboxCmd())
 
 	return cmd
 }

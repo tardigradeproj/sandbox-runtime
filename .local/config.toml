@@ -16,6 +16,12 @@ level  = 3
 [grpc]
 listen_address = "unix:///var/run/sandbox-runtime.sock"
 
+[grpc.tls]
+enabled = false
+cert_file = "/etc/sandbox-runtime/server-cert.pem"
+key_file = "/etc/sandbox-runtime/server-key.pem"
+client_ca_file = "/etc/sandbox-runtime/client-ca.pem"
+
 [logs]
 level  = "info"
 format = "text"
