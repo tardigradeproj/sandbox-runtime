@@ -103,6 +103,15 @@ if [ $? -ne 0 ]; then
 	exec sh  # Drop to shell for debugging
 fi
 
+# Not exec'd -- runs to completion and falls through to the normal
+# handoff below either way, same as every other tier-specific init
+# path. || true: a failure here (bad curl, a nonzero-exit boot
+# script, whatever) must never be allowed to fail the sandbox's boot --
+# it's the caller's user_data, not part of the platform.
+if [ -x /usr/local/sbin/user-data-boot ]; then
+	chroot . /usr/local/sbin/user-data-boot || true
+fi
+
 if [ -x /sbin/init ]; then
 	exec chroot . /sbin/init
 elif [ -x /usr/local/bin/sandboxd ]; then

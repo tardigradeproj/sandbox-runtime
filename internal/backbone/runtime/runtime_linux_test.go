@@ -278,6 +278,21 @@ func TestCreateSandboxRequiresImage(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
+func TestCreateSandboxUserDataRequiresJailer(t *testing.T) {
+	r, st := newTestRuntime(t, t.TempDir())
+	seedRootfsEntry(t, st, "myimage:latest")
+
+	_, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
+		Config: &v1.SandboxConfig{
+			Metadata:   &v1.SandboxMetadata{Uid: "sandbox-1"},
+			Resources:  &v1.SandboxResources{StorageBytes: 1024, MemoryBytes: 128 << 20},
+			BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: "myimage:latest"}}},
+			UserData:   &v1.SandboxUserData{Boot: "#!/bin/sh\necho hello"},
+		},
+	})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
 func TestCreateSandboxUnknownImage(t *testing.T) {
 	r, _ := newTestRuntime(t, t.TempDir())
 	_, err := r.CreateSandbox(context.Background(), &v1.CreateSandboxRequest{
@@ -598,6 +613,45 @@ func TestStartSandboxSuccess(t *testing.T) {
 	got, err := os.ReadFile(reqLogPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(got), "PUT /actions")
+}
+
+func TestUpdateSandboxUserDataRequiresSandboxId(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, err := r.UpdateSandboxUserData(context.Background(), &v1.UpdateSandboxUserDataRequest{})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestUpdateSandboxUserDataRequiresJailer(t *testing.T) {
+	r, _ := newTestRuntime(t, t.TempDir())
+	_, err := r.UpdateSandboxUserData(context.Background(), &v1.UpdateSandboxUserDataRequest{
+		SandboxId: "sandbox-1",
+		UserData:  &v1.SandboxUserData{Boot: "echo hello"},
+	})
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+}
+
+func TestUpdateSandboxUserDataUnknownSandbox(t *testing.T) {
+	staticUID, staticGID := 1000, 1000
+	st, err := store.New(t.TempDir())
+	require.NoError(t, err)
+	r, err := NewRuntime(&cfg.Settings{
+		State: t.TempDir(),
+		Runtime: cfg.Runtime{
+			Firecracker: cfg.Firecracker{
+				Jailer: cfg.Jailer{
+					Enabled:       true,
+					ChrootBaseDir: t.TempDir(),
+					UIDGID:        cfg.UIDGID{Mode: "precreated", StaticUID: &staticUID, StaticGID: &staticGID},
+				},
+			},
+		},
+	}, st)
+	require.NoError(t, err)
+	_, err = r.UpdateSandboxUserData(context.Background(), &v1.UpdateSandboxUserDataRequest{
+		SandboxId: "does-not-exist",
+		UserData:  &v1.SandboxUserData{Boot: "echo hello"},
+	})
+	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 
 func TestStopSandboxRequiresSandboxId(t *testing.T) {

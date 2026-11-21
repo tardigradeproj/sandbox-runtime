@@ -10,8 +10,9 @@ ARG ROOTFS_TARBALL
 ADD ${ROOTFS_TARBALL} /
 
 # openrc's post-install rewrites /etc/inittab to boot its own
-# runlevels. pivot_root is already a busybox applet here.
-RUN apk add --no-cache openrc bash sudo shadow
+# runlevels. pivot_root is already a busybox applet here. curl is for
+# images/user-data-boot.
+RUN apk add --no-cache openrc bash sudo shadow curl
 
 # Stock inittab only gettys on vt consoles, which don't exist under
 # Firecracker -- enable the commented-out serial console entry.
@@ -27,3 +28,4 @@ COPY sandboxd.openrc /etc/init.d/sandboxd
 RUN chmod +x /etc/init.d/sandboxd && rc-update add sandboxd default
 
 COPY --chmod=755 init /init
+COPY --chmod=755 user-data-boot /usr/local/sbin/user-data-boot
