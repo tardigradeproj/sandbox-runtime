@@ -44,6 +44,14 @@ import (
 
 const firecrackerSocketName = "firecracker.sock"
 
+// sandboxStateDir is sandboxID's on-disk state directory: its overlay,
+// firecracker socket/log, console log and descriptor all live here,
+// nested under a "vm" subfolder so they don't clutter cfg.State
+// alongside the runtime's other state (jailer, jailer-ids, network).
+func sandboxStateDir(state, sandboxID string) string {
+	return filepath.Join(state, "vm", sandboxID)
+}
+
 // jailerSocketPath mirrors the SDK's own jail() path computation, so
 // StartSandbox can find a jailed sandbox's socket independently.
 func jailerSocketPath(fc cfg.Firecracker, sandboxID string) string {
@@ -139,7 +147,7 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 
-	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	sandboxDir := sandboxStateDir(r.cfg.State, sandboxID)
 	if err := os.MkdirAll(sandboxDir, 0o755); err != nil {
 		log.WithError(err).Error("create sandbox: failed to create sandbox dir")
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
@@ -307,7 +315,7 @@ func (r *Runtime) createSandboxFromCheckpoint(ctx context.Context, req *v1.Creat
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 
-	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	sandboxDir := sandboxStateDir(r.cfg.State, sandboxID)
 	if err := os.Mkdir(sandboxDir, 0o755); err != nil {
 		if os.IsExist(err) {
 			return nil, status.Errorf(codes.AlreadyExists, "sandbox %q already exists", sandboxID)
@@ -566,7 +574,7 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 	log.Info("starting sandbox")
 
 	fc := r.cfg.Runtime.Firecracker
-	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	sandboxDir := sandboxStateDir(r.cfg.State, sandboxID)
 	socketPath := filepath.Join(sandboxDir, firecrackerSocketName)
 	if fc.Jailer.Enabled {
 		socketPath = jailerSocketPath(fc, sandboxID)
@@ -651,6 +659,98 @@ func (r *Runtime) UpdateSandboxUserData(ctx context.Context, req *v1.UpdateSandb
 	return &v1.UpdateSandboxUserDataResponse{}, nil
 }
 
+// ListSandbox considers that jailer is always enabled
+func (r *Runtime) ListSandbox(ctx context.Context, req *v1.ListSandboxRequest) (*v1.ListSandboxResponse, error) {
+	filter := req.GetFilter()
+
+	var sandboxList []*v1.SandboxTrait
+	log := logrus.WithField(obs.Operation, obs.OperationListSandbox)
+	log.Info("listing sandboxes")
+	// user wants to list all sandboxes
+	fc := r.cfg.Runtime.Firecracker
+	jailerRoot := filepath.Join(fc.Jailer.ChrootBaseDir, filepath.Base(fc.Bin))
+	entries, err := os.ReadDir(jailerRoot)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list sandbox: failed to read sandboxes: %v", err)
+	}
+	for _, entry := range entries {
+		sandboxID := entry.Name()
+		if entry.IsDir() {
+			sandboxDescriptor, err := readSandboxDescriptor(sandboxStateDir(r.cfg.State, sandboxID))
+			if err != nil {
+				log.WithField(obs.SandboxID, sandboxID).
+					WithError(err).
+					Error("failed to read sandbox descriptor. Sandboxes should always have descriptor - backbone is in an inconsistent state")
+				continue
+			}
+			ipAddress, _, err := network.IPAddress(sandboxID)
+			if err != nil {
+				log.WithField(obs.SandboxID, sandboxID).
+					WithError(err).
+					Error("checkpoint sandbox: failed to look up sandbox ip")
+			}
+			socketPath := jailerSocketPath(fc, sandboxID)
+			client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+			info, err := client.GetInstanceInfo(ctx)
+			if err != nil {
+				log.WithError(err).Error("checkpoint sandbox: failed to get instance info")
+				continue
+			}
+			// started Running Paused
+			state := info.GetPayload().State
+			var microvmState v1.SandboxStateValue
+			switch *state {
+			case models.InstanceInfoStatePaused:
+				microvmState = v1.SandboxStateValue_STATE_STOPPED
+			case models.InstanceInfoStateRunning:
+				microvmState = v1.SandboxStateValue_STATE_RUNNING
+			case models.InstanceInfoStateNotStarted:
+				microvmState = v1.SandboxStateValue_STATE_PENDING
+			default:
+				microvmState = v1.SandboxStateValue_STATE_UNSPECIFIED
+			}
+
+			sandbox := &v1.SandboxTrait{
+				Config: sandboxDescriptor.Config,
+				User: &v1.UserGroup{
+					Uid: uint64(sandboxDescriptor.UID),
+					Gid: uint64(sandboxDescriptor.GID),
+				},
+				Network: &v1.SandboxNetwork{
+					IpAddress: ipAddress,
+				},
+				State: microvmState,
+			}
+			sandboxList = append(sandboxList, sandbox)
+		}
+	}
+	filteredList := make([]*v1.SandboxTrait, 0, len(sandboxList))
+	for _, sandbox := range sandboxList {
+		if matchesFilter(sandbox, filter) {
+			filteredList = append(filteredList, sandbox)
+		}
+	}
+	return &v1.ListSandboxResponse{Sandbox: filteredList}, nil
+}
+func matchesFilter(sandbox *v1.SandboxTrait, filter *v1.SandboxFilter) bool {
+	if filter.Uid != "" && sandbox.Config.Metadata.Uid != filter.Uid {
+		return false
+	}
+
+	if filter.State != v1.SandboxStateValue_STATE_UNSPECIFIED &&
+		sandbox.State != filter.State {
+		return false
+	}
+
+	for k, v := range filter.LabelSelector {
+		if sandbox.Config.Labels[k] != v {
+			return false
+		}
+	}
+
+	return true
+}
+
 // StopSandbox pauses a running sandbox's vCPUs over its API socket,
 // the same reconnect-by-socket pattern as StartSandbox.
 func (r *Runtime) StopSandbox(ctx context.Context, req *v1.StopSandboxRequest) (*v1.StopSandboxResponse, error) {
@@ -698,7 +798,7 @@ func (r *Runtime) RemoveSandbox(ctx context.Context, req *v1.RemoveSandboxReques
 	log := logrus.WithField(obs.SandboxID, sandboxID)
 	log.Info("removing sandbox")
 
-	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	sandboxDir := sandboxStateDir(r.cfg.State, sandboxID)
 	if _, err := os.Stat(sandboxDir); err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "sandbox %q not found", sandboxID)
@@ -825,7 +925,7 @@ func (r *Runtime) CheckpointSandbox(ctx context.Context, req *v1.CheckpointSandb
 	log.Info("checkpointing sandbox")
 
 	fc := r.cfg.Runtime.Firecracker
-	sandboxDir := filepath.Join(r.cfg.State, sandboxID)
+	sandboxDir := sandboxStateDir(r.cfg.State, sandboxID)
 	socketPath := jailerSocketPath(fc, sandboxID)
 	if _, err := os.Stat(socketPath); err != nil {
 		if os.IsNotExist(err) {

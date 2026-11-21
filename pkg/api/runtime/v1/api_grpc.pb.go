@@ -35,6 +35,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	RuntimeService_CreateSandbox_FullMethodName         = "/runtime.v1.RuntimeService/CreateSandbox"
 	RuntimeService_StartSandbox_FullMethodName          = "/runtime.v1.RuntimeService/StartSandbox"
+	RuntimeService_ListSandbox_FullMethodName           = "/runtime.v1.RuntimeService/ListSandbox"
 	RuntimeService_UpdateSandboxUserData_FullMethodName = "/runtime.v1.RuntimeService/UpdateSandboxUserData"
 	RuntimeService_StopSandbox_FullMethodName           = "/runtime.v1.RuntimeService/StopSandbox"
 	RuntimeService_RemoveSandbox_FullMethodName         = "/runtime.v1.RuntimeService/RemoveSandbox"
@@ -50,10 +51,12 @@ const (
 type RuntimeServiceClient interface {
 	CreateSandbox(ctx context.Context, in *CreateSandboxRequest, opts ...grpc.CallOption) (*CreateSandboxResponse, error)
 	StartSandbox(ctx context.Context, in *StartSandboxRequest, opts ...grpc.CallOption) (*StartSandboxResponse, error)
+	// ListSandbox lists the sandboxes known to the runtime, optionally
+	// narrowed by filter.
+	ListSandbox(ctx context.Context, in *ListSandboxRequest, opts ...grpc.CallOption) (*ListSandboxResponse, error)
 	// UpdateSandboxUserData replaces a running sandbox's user data,
 	// delivered to the guest over the same sandbox metadata endpoint
-	// SandboxConfig.user_data used at creation -- the guest's next read
-	// reflects it immediately, no restart required.
+	// SandboxConfig.user_data used at creation.
 	UpdateSandboxUserData(ctx context.Context, in *UpdateSandboxUserDataRequest, opts ...grpc.CallOption) (*UpdateSandboxUserDataResponse, error)
 	// StopSandbox pauses a running sandbox's vCPUs. The process keeps
 	// running and its memory/CPU allocation is not released. Idempotent:
@@ -94,6 +97,16 @@ func (c *runtimeServiceClient) StartSandbox(ctx context.Context, in *StartSandbo
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StartSandboxResponse)
 	err := c.cc.Invoke(ctx, RuntimeService_StartSandbox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeServiceClient) ListSandbox(ctx context.Context, in *ListSandboxRequest, opts ...grpc.CallOption) (*ListSandboxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSandboxResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_ListSandbox_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -149,10 +162,12 @@ func (c *runtimeServiceClient) CheckpointSandbox(ctx context.Context, in *Checkp
 type RuntimeServiceServer interface {
 	CreateSandbox(context.Context, *CreateSandboxRequest) (*CreateSandboxResponse, error)
 	StartSandbox(context.Context, *StartSandboxRequest) (*StartSandboxResponse, error)
+	// ListSandbox lists the sandboxes known to the runtime, optionally
+	// narrowed by filter.
+	ListSandbox(context.Context, *ListSandboxRequest) (*ListSandboxResponse, error)
 	// UpdateSandboxUserData replaces a running sandbox's user data,
 	// delivered to the guest over the same sandbox metadata endpoint
-	// SandboxConfig.user_data used at creation -- the guest's next read
-	// reflects it immediately, no restart required.
+	// SandboxConfig.user_data used at creation.
 	UpdateSandboxUserData(context.Context, *UpdateSandboxUserDataRequest) (*UpdateSandboxUserDataResponse, error)
 	// StopSandbox pauses a running sandbox's vCPUs. The process keeps
 	// running and its memory/CPU allocation is not released. Idempotent:
@@ -184,6 +199,9 @@ func (UnimplementedRuntimeServiceServer) CreateSandbox(context.Context, *CreateS
 }
 func (UnimplementedRuntimeServiceServer) StartSandbox(context.Context, *StartSandboxRequest) (*StartSandboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartSandbox not implemented")
+}
+func (UnimplementedRuntimeServiceServer) ListSandbox(context.Context, *ListSandboxRequest) (*ListSandboxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSandbox not implemented")
 }
 func (UnimplementedRuntimeServiceServer) UpdateSandboxUserData(context.Context, *UpdateSandboxUserDataRequest) (*UpdateSandboxUserDataResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateSandboxUserData not implemented")
@@ -250,6 +268,24 @@ func _RuntimeService_StartSandbox_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RuntimeServiceServer).StartSandbox(ctx, req.(*StartSandboxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RuntimeService_ListSandbox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSandboxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).ListSandbox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_ListSandbox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).ListSandbox(ctx, req.(*ListSandboxRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -340,6 +376,10 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StartSandbox",
 			Handler:    _RuntimeService_StartSandbox_Handler,
+		},
+		{
+			MethodName: "ListSandbox",
+			Handler:    _RuntimeService_ListSandbox_Handler,
 		},
 		{
 			MethodName: "UpdateSandboxUserData",
