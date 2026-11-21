@@ -459,7 +459,13 @@ func newValidateRestoreSandboxCmd() *cobra.Command {
 // non-orphaned process group for as long as this command keeps running,
 // e.g.:
 //
-//	go run ./cmd validate-run-sandbox docker.io/library/alpine:3.19
+//	go run ./cmd validate-run-sandbox docker.io/library/alpine:3.19 --boot "echo hello from boot"
+//
+// validateRunSandboxDefaultBoot is a trivial, easily-verifiable
+// default for --boot: check /var/log/user-data-boot.log inside the
+// guest afterward for its output.
+const validateRunSandboxDefaultBoot = "#!/bin/sh\necho hello from user-data boot script\ndate -u\n"
+
 func newValidateRunSandboxCmd() *cobra.Command {
 	var (
 		configPath string
@@ -467,6 +473,7 @@ func newValidateRunSandboxCmd() *cobra.Command {
 		cpu        float64
 		memoryMib  int64
 		storageMib int64
+		boot       string
 	)
 
 	cmd := &cobra.Command{
@@ -509,17 +516,20 @@ func newValidateRunSandboxCmd() *cobra.Command {
 					att.GetIpAddress(), att.GetGatewayIp())
 			}
 
-			if _, err := rt.CreateSandbox(ctx, &v1.CreateSandboxRequest{
-				Config: &v1.SandboxConfig{
-					Metadata:   &v1.SandboxMetadata{Uid: uid},
-					BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: image}, IsRootDevice: true, IsReadOnly: true}},
-					Resources: &v1.SandboxResources{
-						Cpu:          cpu,
-						MemoryBytes:  memoryMib << 20,
-						StorageBytes: storageMib << 20,
-					},
+			config := &v1.SandboxConfig{
+				Metadata:   &v1.SandboxMetadata{Uid: uid},
+				BootSource: &v1.SandboxConfig_Rootfs{Rootfs: &v1.RootFSMount{Spec: &v1.RootFSSpec{Image: image}, IsRootDevice: true, IsReadOnly: true}},
+				Resources: &v1.SandboxResources{
+					Cpu:          cpu,
+					MemoryBytes:  memoryMib << 20,
+					StorageBytes: storageMib << 20,
 				},
-			}); err != nil {
+			}
+			if boot != "" {
+				config.UserData = &v1.SandboxUserData{Boot: boot}
+			}
+
+			if _, err := rt.CreateSandbox(ctx, &v1.CreateSandboxRequest{Config: config}); err != nil {
 				return err
 			}
 
@@ -539,10 +549,11 @@ func newValidateRunSandboxCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
-	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-restore-2", "sandbox uid")
+	cmd.Flags().StringVar(&uid, "uid", "validate-sandbox-restore-4", "sandbox uid")
 	cmd.Flags().Float64Var(&cpu, "cpu", 1, "vCPU count")
 	cmd.Flags().Int64Var(&memoryMib, "memory-mib", 512, "memory size, in MiB")
 	cmd.Flags().Int64Var(&storageMib, "storage-mib", 256, "overlay size, in MiB")
+	cmd.Flags().StringVar(&boot, "boot", validateRunSandboxDefaultBoot, "config.user_data.boot script to run at guest boot (see images/user-data-boot); empty skips setting user_data")
 
 	return cmd
 }

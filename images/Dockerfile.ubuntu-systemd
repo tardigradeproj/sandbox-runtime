@@ -10,9 +10,9 @@ ARG ROOTFS_TARBALL
 ADD ${ROOTFS_TARBALL} /
 
 # pivot_root moved into util-linux-extra on Ubuntu 26.04's minimal
-# image, not installed by default.
+# image, not installed by default. curl is for images/user-data-boot.
 RUN apt-get update -qq \
-    && apt-get install -y -qq --no-install-recommends util-linux-extra \
+    && apt-get install -y -qq --no-install-recommends util-linux-extra curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -37,3 +37,4 @@ COPY sandboxd.service /etc/systemd/system/sandboxd.service
 RUN systemctl enable sandboxd.service
 
 COPY --chmod=755 init /init
+COPY --chmod=755 user-data-boot /usr/local/sbin/user-data-boot
