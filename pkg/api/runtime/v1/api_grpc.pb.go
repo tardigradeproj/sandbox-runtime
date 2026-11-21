@@ -40,6 +40,7 @@ const (
 	RuntimeService_StopSandbox_FullMethodName           = "/runtime.v1.RuntimeService/StopSandbox"
 	RuntimeService_RemoveSandbox_FullMethodName         = "/runtime.v1.RuntimeService/RemoveSandbox"
 	RuntimeService_CheckpointSandbox_FullMethodName     = "/runtime.v1.RuntimeService/CheckpointSandbox"
+	RuntimeService_ListCheckpoint_FullMethodName        = "/runtime.v1.RuntimeService/ListCheckpoint"
 )
 
 // RuntimeServiceClient is the client API for RuntimeService service.
@@ -73,6 +74,9 @@ type RuntimeServiceClient interface {
 	// so CreateSandbox can later resume a new sandbox from it. Requires
 	// the sandbox to already be stopped; fails if it's still running.
 	CheckpointSandbox(ctx context.Context, in *CheckpointSandboxRequest, opts ...grpc.CallOption) (*CheckpointSandboxResponse, error)
+	// ListCheckpoint lists the checkpoints known to the runtime,
+	// optionally narrowed by filter.
+	ListCheckpoint(ctx context.Context, in *ListCheckpointRequest, opts ...grpc.CallOption) (*ListCheckpointResponse, error)
 }
 
 type runtimeServiceClient struct {
@@ -153,6 +157,16 @@ func (c *runtimeServiceClient) CheckpointSandbox(ctx context.Context, in *Checkp
 	return out, nil
 }
 
+func (c *runtimeServiceClient) ListCheckpoint(ctx context.Context, in *ListCheckpointRequest, opts ...grpc.CallOption) (*ListCheckpointResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCheckpointResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_ListCheckpoint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RuntimeServiceServer is the server API for RuntimeService service.
 // All implementations must embed UnimplementedRuntimeServiceServer
 // for forward compatibility.
@@ -184,6 +198,9 @@ type RuntimeServiceServer interface {
 	// so CreateSandbox can later resume a new sandbox from it. Requires
 	// the sandbox to already be stopped; fails if it's still running.
 	CheckpointSandbox(context.Context, *CheckpointSandboxRequest) (*CheckpointSandboxResponse, error)
+	// ListCheckpoint lists the checkpoints known to the runtime,
+	// optionally narrowed by filter.
+	ListCheckpoint(context.Context, *ListCheckpointRequest) (*ListCheckpointResponse, error)
 	mustEmbedUnimplementedRuntimeServiceServer()
 }
 
@@ -214,6 +231,9 @@ func (UnimplementedRuntimeServiceServer) RemoveSandbox(context.Context, *RemoveS
 }
 func (UnimplementedRuntimeServiceServer) CheckpointSandbox(context.Context, *CheckpointSandboxRequest) (*CheckpointSandboxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckpointSandbox not implemented")
+}
+func (UnimplementedRuntimeServiceServer) ListCheckpoint(context.Context, *ListCheckpointRequest) (*ListCheckpointResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCheckpoint not implemented")
 }
 func (UnimplementedRuntimeServiceServer) mustEmbedUnimplementedRuntimeServiceServer() {}
 func (UnimplementedRuntimeServiceServer) testEmbeddedByValue()                        {}
@@ -362,6 +382,24 @@ func _RuntimeService_CheckpointSandbox_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RuntimeService_ListCheckpoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCheckpointRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).ListCheckpoint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_ListCheckpoint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).ListCheckpoint(ctx, req.(*ListCheckpointRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RuntimeService_ServiceDesc is the grpc.ServiceDesc for RuntimeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -396,6 +434,10 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckpointSandbox",
 			Handler:    _RuntimeService_CheckpointSandbox_Handler,
+		},
+		{
+			MethodName: "ListCheckpoint",
+			Handler:    _RuntimeService_ListCheckpoint_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

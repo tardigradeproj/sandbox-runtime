@@ -19,8 +19,9 @@ const (
 	GRPCListenAddress = "grpc.listen_address"
 	FirecrackerBin    = "firecracker.bin"
 
-	CheckPointID         = "checkpoint.id"
-	ListFilter           = "list.filter"
-	Operation            = "operation"
-	OperationListSandbox = "list.sandbox"
+	CheckPointID            = "checkpoint.id"
+	ListFilter              = "list.filter"
+	Operation               = "operation"
+	OperationListSandbox    = "list.sandbox"
+	OperationListCheckpoint = "list.checkpoint"
 )
