@@ -2,15 +2,10 @@ package main
 
 import (
 	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
-	"github.com/tardigradeproj/sandbox-runtime/internal/server"
-	"github.com/tardigradeproj/sandbox-runtime/pkg/observability"
+	"github.com/tardigradeproj/sandbox-runtime/cmd/app"
 )
 
 func main() {
@@ -20,48 +15,12 @@ func main() {
 }
 
 func newRootCmd() *cobra.Command {
-	var configPath string
-
 	cmd := &cobra.Command{
 		Use:   "sandbox-runtime",
 		Short: "sandbox-runtime runs the Firecracker-backed sandbox runtime daemon",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := cfg.Load(configPath)
-			if err != nil {
-				return err
-			}
-
-			if err := observability.ConfigureLogging(cfg.Logs.Level, cfg.Logs.Format); err != nil {
-				return err
-			}
-
-			logrus.Infof("loaded config from %s", configPath)
-			logrus.WithFields(logrus.Fields{
-				observability.ConfigRootfs:      cfg.Rootfs.Dir,
-				observability.ConfigVersion:     cfg.Version,
-				observability.GRPCListenAddress: cfg.GRPC.ListenAddress,
-				observability.FirecrackerBin:    cfg.Runtime.Firecracker.Bin,
-			}).Info("runtime configuration")
-
-			s, lis, err := server.New(cfg)
-			if err != nil {
-				return err
-			}
-
-			sigCtx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
-			go func() {
-				<-sigCtx.Done()
-				logrus.Info("shutting down")
-				s.GracefulStop()
-			}()
-
-			logrus.WithField(observability.GRPCListenAddress, cfg.GRPC.ListenAddress).Info("serving")
-			return s.Serve(lis)
-		},
 	}
 
-	cmd.Flags().StringVar(&configPath, "config", "/etc/sandbox-runtime/config.toml", "path to the configuration file")
+	cmd.AddCommand(app.NewGRPCCmd(), app.NewConsoleCmd())
 
 	return cmd
 }
