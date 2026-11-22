@@ -14,10 +14,11 @@ const (
 	RootfsPath   = "rootfs.path"
 	RootfsSize   = "rootfs.size"
 
-	ConfigRootfs      = "config.rootfs"
-	ConfigVersion     = "config.version"
-	GRPCListenAddress = "grpc.listen_address"
-	FirecrackerBin    = "firecracker.bin"
+	ConfigRootfs         = "config.rootfs"
+	ConfigVersion        = "config.version"
+	GRPCListenAddress    = "grpc.listen_address"
+	ConsoleListenAddress = "console.listen_address"
+	FirecrackerBin       = "firecracker.bin"
 
 	CheckPointID            = "checkpoint.id"
 	ListFilter              = "list.filter"

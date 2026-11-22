@@ -80,7 +80,7 @@ func spawnSandbox(ctx context.Context, log *logrus.Entry, cu *cleanup.Cleanup, m
 	})
 
 	log.WithField(obs.SocketPath, socketPath).Debug("create sandbox: spawning firecracker process")
-	if err := machine.Handlers.Run(ctx, machine); err != nil {
+	if err := machine.Handlers.Run(context.WithoutCancel(ctx), machine); err != nil {
 		log.WithError(err).Error("create sandbox: failed to spawn/configure firecracker")
 		return err
 	}
@@ -199,6 +199,8 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 	socketPath := filepath.Join(sandboxDir, firecrackerSocketName)
 	logPath := filepath.Join(sandboxDir, "firecracker.log")
 
+	vmCtx := context.WithoutCancel(ctx)
+
 	machineCfg := firecracker.Config{
 		VMID:            sandboxID,
 		SocketPath:      socketPath,
@@ -232,7 +234,7 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 		logPath = filepath.Join(sandboxDir, "firecracker.fifo")
 		machineCfg.LogFifo = logPath
 
-		machine, err = firecracker.NewMachine(ctx, machineCfg)
+		machine, err = firecracker.NewMachine(vmCtx, machineCfg)
 		if err != nil {
 			log.WithError(err).Error("create sandbox: failed to build firecracker machine config")
 			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
@@ -254,15 +256,15 @@ func (r *Runtime) CreateSandbox(ctx context.Context, req *v1.CreateSandboxReques
 			WithStdout(consoleLog).
 			WithStderr(consoleLog).
 			AddArgs("--id", sandboxID).
-			Build(ctx)
+			Build(vmCtx)
 
-		machine, err = firecracker.NewMachine(ctx, machineCfg, firecracker.WithProcessRunner(cmd))
+		machine, err = firecracker.NewMachine(vmCtx, machineCfg, firecracker.WithProcessRunner(cmd))
 		if err != nil {
 			log.WithError(err).Error("create sandbox: failed to build firecracker machine config")
 			return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 		}
 	}
-	if err := spawnSandbox(ctx, log, &cu, machine, socketPath); err != nil {
+	if err := spawnSandbox(vmCtx, log, &cu, machine, socketPath); err != nil {
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 
@@ -376,7 +378,10 @@ func (r *Runtime) createSandboxFromCheckpoint(ctx context.Context, req *v1.Creat
 	}
 	defer consoleLog.Close()
 
-	machine, err := firecracker.NewMachine(ctx, machineCfg, firecracker.WithSnapshot(memFilePath, snapshotPath))
+	// vmCtx: see CreateSandbox's own comment -- the VM must outlive
+	// this one RPC's context.
+	vmCtx := context.WithoutCancel(ctx)
+	machine, err := firecracker.NewMachine(vmCtx, machineCfg, firecracker.WithSnapshot(memFilePath, snapshotPath))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "create sandbox: failed to build firecracker machine config: %v", err)
 	}
@@ -389,7 +394,7 @@ func (r *Runtime) createSandboxFromCheckpoint(ctx context.Context, req *v1.Creat
 		linkCheckpointFilesHandler(fc, sandboxID, uid, gid, rootfsPath, overlayPath, memFilePath, snapshotPath),
 	)
 
-	if err := spawnSandbox(ctx, log, &cu, machine, socketPath); err != nil {
+	if err := spawnSandbox(vmCtx, log, &cu, machine, socketPath); err != nil {
 		return nil, status.Errorf(codes.Internal, "create sandbox: %v", err)
 	}
 	cu.Release()
@@ -734,16 +739,20 @@ func (r *Runtime) ListSandbox(ctx context.Context, req *v1.ListSandboxRequest) (
 	return &v1.ListSandboxResponse{Sandbox: filteredList}, nil
 }
 func matchesFilter(sandbox *v1.SandboxTrait, filter *v1.SandboxFilter) bool {
-	if filter.Uid != "" && sandbox.Config.Metadata.Uid != filter.Uid {
+	// filter is nil whenever a caller sends ListSandboxRequest with no
+	// filter set at all (e.g. "{}") -- the common case for "list
+	// everything" -- so every access here must go through the
+	// generated nil-safe Get* accessors, never direct field access.
+	if filter.GetUid() != "" && sandbox.Config.Metadata.Uid != filter.GetUid() {
 		return false
 	}
 
-	if filter.State != v1.SandboxStateValue_STATE_UNSPECIFIED &&
-		sandbox.State != filter.State {
+	if filter.GetState() != v1.SandboxStateValue_STATE_UNSPECIFIED &&
+		sandbox.State != filter.GetState() {
 		return false
 	}
 
-	for k, v := range filter.LabelSelector {
+	for k, v := range filter.GetLabelSelector() {
 		if sandbox.Config.Metadata.Labels[k] != v {
 			return false
 		}
