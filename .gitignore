@@ -42,3 +42,16 @@ images/*.tar.xz
 /2.md
 /3.md
 /mknod.md
+
+# make build's output binary (see Makefile)
+/bin/
+
+# Frontend (ui/frontend): node_modules and the Vite build output are
+# never committed, except the placeholder dist/index.html (see
+# ui/frontend/embed.go) so //go:embed always has something to embed on
+# a fresh checkout. src/gen is buf-generated -- see `make proto`.
+ui/frontend/node_modules/
+ui/frontend/dist/*
+!ui/frontend/dist/index.html
+ui/frontend/src/gen/
+ui/frontend/*.tsbuildinfo
