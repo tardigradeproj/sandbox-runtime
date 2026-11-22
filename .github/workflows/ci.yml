@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.7"
+      - run: make vet
+      - run: make test
+
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  # proto-drift catches api.proto changes whose regenerated Go bindings
+  # (pkg/api/runtime/v1) weren't committed alongside them -- `make
+  # proto` must be run after editing api.proto. ui/frontend/src/gen is
+  # never committed (see .gitignore), so there's nothing to diff there;
+  # this job still exercises `buf generate`'s TS output so a plugin/
+  # config break surfaces here instead of silently at console-build time.
+  proto-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.7"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/frontend/package-lock.json
+      - run: npm ci
+        working-directory: ui/frontend
+      - run: make proto-tools
+      - run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: make proto
+      - run: git diff --exit-code -- pkg/api/runtime/v1
