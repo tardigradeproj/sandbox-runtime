@@ -18,19 +18,27 @@ jobs:
 
   console:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ui/frontend
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.7"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: ui/frontend/package-lock.json
       - run: npm ci
+        working-directory: ui/frontend
+      # src/gen is buf-generated and gitignored (see .gitignore) -- it
+      # must be regenerated before typecheck can resolve its imports.
+      - run: make proto-tools
+      - run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: make proto
       - run: npm run lint
+        working-directory: ui/frontend
       - run: npm run typecheck
+        working-directory: ui/frontend
 
   # proto-drift catches api.proto changes whose regenerated Go bindings
   # (pkg/api/runtime/v1) weren't committed alongside them -- `make

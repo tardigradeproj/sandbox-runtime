@@ -22,9 +22,9 @@ proto:
 .PHONY: proto-tools
 proto-tools:
 	go install github.com/bufbuild/buf/cmd/buf@v1.75.0
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.1
 
 .PHONY: console-build
 console-build:
