@@ -32,13 +32,9 @@ import (
 	uiserver "github.com/tardigradeproj/sandbox-runtime/ui/server"
 )
 
-// NewConsoleCmd serves the Backbone Console (the browser UI, see
-// ui/) on its own listener, proxying RuntimeService/RootFSService/
+// NewConsoleCmd serves the Backbone Console on its own listener, proxying RuntimeService/RootFSService/
 // NetworkService calls to a backbone daemon (NewGRPCCmd) running
-// separately, possibly on a different host. It's not part of the
-// daemon's own cfg.Settings: it has no on-disk state of its own, just
-// two addresses -- where to listen, and where to find the backbone --
-// so it takes both as flags rather than a config file.
+// separately, possibly on a different host.
 func NewConsoleCmd() *cobra.Command {
 	var listenAddress string
 	var backboneAddress string

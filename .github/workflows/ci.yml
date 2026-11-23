@@ -40,12 +40,6 @@ jobs:
       - run: npm run typecheck
         working-directory: ui/frontend
 
-  # proto-drift catches api.proto changes whose regenerated Go bindings
-  # (pkg/api/runtime/v1) weren't committed alongside them -- `make
-  # proto` must be run after editing api.proto. ui/frontend/src/gen is
-  # never committed (see .gitignore), so there's nothing to diff there;
-  # this job still exercises `buf generate`'s TS output so a plugin/
-  # config break surfaces here instead of silently at console-build time.
   proto-drift:
     runs-on: ubuntu-latest
     steps:

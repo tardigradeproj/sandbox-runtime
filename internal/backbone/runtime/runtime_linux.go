@@ -621,6 +621,7 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 	// into Paused in the first place.
 	state := info.GetPayload().State
 	if state != nil && *state == models.InstanceInfoStatePaused {
+		log.Debug("sandbox is paused")
 		vm := &models.VM{State: firecracker.String(models.VMStateResumed)}
 		if _, err := client.PatchVM(ctx, vm); err != nil {
 			log.WithError(err).Error("start sandbox: failed to resume vm")
