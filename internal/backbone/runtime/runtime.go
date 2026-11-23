@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 
 	"github.com/tardigradeproj/sandbox-runtime/internal/cfg"
 	v1 "github.com/tardigradeproj/sandbox-runtime/pkg/api/runtime/v1"
@@ -45,6 +46,12 @@ type Runtime struct {
 	// overlay copy (see CheckpointSandbox), built once from
 	// cfg.Checkpoint.Compression.Filesystem.Format.
 	fileSystemCheckpointCompression compress.Compressor
+	// fcClients caches one *firecracker.Client per sandbox ID (see
+	// runtime_linux.go's firecrackerClient) so repeated calls into a
+	// sandbox's Firecracker API socket (e.g. ListSandbox polling
+	// GetInstanceInfo) reuse one persistent connection instead of
+	// opening a new one.
+	fcClients sync.Map
 }
 
 // NewRuntime constructs a Runtime.

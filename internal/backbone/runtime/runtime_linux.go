@@ -566,6 +566,20 @@ func openConsoleLog(sandboxDir string) (*os.File, error) {
 	return os.OpenFile(filepath.Join(sandboxDir, "console.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 }
 
+// firecrackerClient returns a cached *firecracker.Client for
+// sandboxID, dialing socketPath lazily on first use -- NewClient opens
+// a fresh connection with nothing to close it, so without caching,
+// repeated calls (e.g. ListSandbox polling) leak connections until
+// Firecracker's API refuses new ones.
+func (r *Runtime) firecrackerClient(sandboxID, socketPath string) *firecracker.Client {
+	if v, ok := r.fcClients.Load(sandboxID); ok {
+		return v.(*firecracker.Client)
+	}
+	c := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	actual, _ := r.fcClients.LoadOrStore(sandboxID, c)
+	return actual.(*firecracker.Client)
+}
+
 // StartSandbox boots a sandbox that CreateSandbox already spawned and
 // configured, by sending the firecracker process the InstanceStart
 // action over its API socket. It reconnects statelessly via the
@@ -593,13 +607,20 @@ func (r *Runtime) StartSandbox(ctx context.Context, req *v1.StartSandboxRequest)
 		return nil, status.Errorf(codes.Internal, "start sandbox: %v", err)
 	}
 
-	// A checkpoint-restored sandbox was already loaded (not booted) by
-	// CreateSandbox; starting it means resuming, not InstanceStart
-	desc, _ := readSandboxDescriptor(sandboxDir)
-	fromCheckpoint := desc.Config.GetCheckpointRef() != ""
+	client := r.firecrackerClient(sandboxID, socketPath)
+	info, err := client.GetInstanceInfo(ctx)
+	if err != nil {
+		log.WithError(err).Error("start sandbox: failed to get instance info")
+		return nil, status.Errorf(codes.Internal, "start sandbox: %v", err)
+	}
 
-	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
-	if fromCheckpoint {
+	// A VM that's already been started once (fresh boot, or loaded
+	// from a checkpoint by CreateSandbox) is Paused, not NotStarted;
+	// resuming it is PatchVM, not another InstanceStart, which
+	// Firecracker rejects the second time regardless of how it got
+	// into Paused in the first place.
+	state := info.GetPayload().State
+	if state != nil && *state == models.InstanceInfoStatePaused {
 		vm := &models.VM{State: firecracker.String(models.VMStateResumed)}
 		if _, err := client.PatchVM(ctx, vm); err != nil {
 			log.WithError(err).Error("start sandbox: failed to resume vm")
@@ -655,7 +676,7 @@ func (r *Runtime) UpdateSandboxUserData(ctx context.Context, req *v1.UpdateSandb
 		return nil, status.Errorf(codes.Internal, "update sandbox user data: %v", err)
 	}
 
-	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	client := r.firecrackerClient(sandboxID, socketPath)
 	if _, err := client.PutMmds(ctx, sandboxUserDataMetadata(req.GetUserData())); err != nil {
 		log.WithError(err).Error("update sandbox user data: failed to set user data")
 		return nil, status.Errorf(codes.Internal, "update sandbox user data: %v", err)
@@ -696,7 +717,7 @@ func (r *Runtime) ListSandbox(ctx context.Context, req *v1.ListSandboxRequest) (
 					Error("checkpoint sandbox: failed to look up sandbox ip")
 			}
 			socketPath := jailerSocketPath(fc, sandboxID)
-			client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+			client := r.firecrackerClient(sandboxID, socketPath)
 			info, err := client.GetInstanceInfo(ctx)
 			if err != nil {
 				log.WithError(err).Error("checkpoint sandbox: failed to get instance info")
@@ -784,7 +805,7 @@ func (r *Runtime) StopSandbox(ctx context.Context, req *v1.StopSandboxRequest) (
 		return nil, status.Errorf(codes.Internal, "stop sandbox: %v", err)
 	}
 
-	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	client := r.firecrackerClient(sandboxID, socketPath)
 	vm := &models.VM{State: firecracker.String(models.VMStatePaused)}
 	if _, err := client.PatchVM(ctx, vm); err != nil {
 		log.WithError(err).Error("stop sandbox: failed to pause vm")
@@ -823,7 +844,7 @@ func (r *Runtime) RemoveSandbox(ctx context.Context, req *v1.RemoveSandboxReques
 		socketPath = jailerSocketPath(fc, sandboxID)
 	}
 	if _, err := os.Stat(socketPath); err == nil {
-		client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+		client := r.firecrackerClient(sandboxID, socketPath)
 		if _, err := client.CreateSyncAction(ctx, &models.InstanceActionInfo{ActionType: new(models.InstanceActionInfoActionTypeSendCtrlAltDel)}); err != nil {
 			log.WithError(err).Warn("remove sandbox: failed to send ctrl-alt-del, falling back to timeout/force")
 		}
@@ -872,6 +893,7 @@ func (r *Runtime) RemoveSandbox(ctx context.Context, req *v1.RemoveSandboxReques
 		log.WithError(err).Error("remove sandbox: failed to remove sandbox dir")
 		return nil, status.Errorf(codes.Internal, "remove sandbox: %v", err)
 	}
+	r.fcClients.Delete(sandboxID)
 
 	log.Info("sandbox removed")
 	return &v1.RemoveSandboxResponse{}, nil
@@ -945,7 +967,7 @@ func (r *Runtime) CheckpointSandbox(ctx context.Context, req *v1.CheckpointSandb
 		return nil, status.Errorf(codes.Internal, "checkpoint sandbox: %v", err)
 	}
 
-	client := firecracker.NewClient(socketPath, logrus.NewEntry(logrus.StandardLogger()), false)
+	client := r.firecrackerClient(sandboxID, socketPath)
 	info, err := client.GetInstanceInfo(ctx)
 	if err != nil {
 		log.WithError(err).Error("checkpoint sandbox: failed to get instance info")
