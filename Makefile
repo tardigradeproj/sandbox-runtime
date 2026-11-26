@@ -1,22 +1,62 @@
 PROTO_DIR := pkg/api/runtime/v1
 PROTO := $(PROTO_DIR)/api.proto
 
+# GO_PACKAGES is every real Go package in this module, scoped to avoid
+# recursing into ui/frontend/node_modules: it's a JS/TS project (see
+# ui/frontend/package.json), and its node_modules can contain stray
+# vendored .go files from npm dependencies (e.g. protobuf-es's own
+# tooling) that `go build ./...`/`go test ./...` would otherwise try
+# to compile as part of this module. ./ui/frontend (no "/...") still
+# covers the embed.go package itself, just not its node_modules below it.
+GO_PACKAGES := ./cmd/... ./internal/... ./pkg/... ./ui/frontend ./ui/server/...
+
+# proto regenerates both the Go bindings (pkg/api/runtime/v1) and the
+# frontend's TypeScript client (ui/frontend/src/gen) from one
+# api.proto, via buf -- see buf.gen.yaml. Requires `make proto-tools`
+# and `cd ui/frontend && npm install` to have been run first (buf
+# resolves the TS plugins from ui/frontend/node_modules/.bin).
 .PHONY: proto
 proto:
-	protoc \
-		--proto_path=. \
-		--go_out=. --go_opt=paths=source_relative \
-		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
-		$(PROTO)
+	buf generate
 
 .PHONY: proto-tools
 proto-tools:
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	go install github.com/bufbuild/buf/cmd/buf@v1.75.0
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.1
+
+.PHONY: console-build
+console-build:
+	cd ui/frontend && npm ci && npm run build
+
+.PHONY: console-lint
+console-lint:
+	cd ui/frontend && npm ci && npm run lint && npm run typecheck
+
+.PHONY: build
+build: console-build
+	go build -o bin/sandbox-runtime ./cmd
+
+CONFIG         ?= /etc/sandbox-runtime/config.toml
+CONSOLE_LISTEN ?= 127.0.0.1:9090
+BACKBONE_ADDR  ?= unix:///var/run/sandbox-runtime.sock
+
+.PHONY: run-grpc
+run-grpc:
+	go run ./cmd grpc --config $(CONFIG)
+
+.PHONY: run-console
+run-console:
+	go run ./cmd console --listen $(CONSOLE_LISTEN) --backbone-addr $(BACKBONE_ADDR)
 
 .PHONY: test
 test:
-	go test ./...
+	go test $(GO_PACKAGES)
+
+.PHONY: vet
+vet:
+	go vet $(GO_PACKAGES)
 
 # test-integration exercises the real mkfs.erofs/erofs-utils toolchain,
 # which is Linux-only, inside a disposable container (see .local/) so it

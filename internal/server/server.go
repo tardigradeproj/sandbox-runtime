@@ -36,27 +36,30 @@ import (
 	"github.com/tardigradeproj/sandbox-runtime/pkg/filesystem/store"
 )
 
-// New builds the gRPC server and the listener for
-// cfg.GRPC.ListenAddress.
-func New(c *cfg.Settings) (*grpc.Server, net.Listener, error) {
+func NewServices(c *cfg.Settings) (rt *runtime.Runtime, rfs *rootfs.RootFS, nsvc *network.Network, err error) {
 	st, err := store.New(c.Rootfs.Dir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("server: %w", err)
+		return nil, nil, nil, fmt.Errorf("server: %w", err)
 	}
 
-	rt, err := runtime.NewRuntime(c, st)
+	rt, err = runtime.NewRuntime(c, st)
 	if err != nil {
-		return nil, nil, fmt.Errorf("server: %w", err)
+		return nil, nil, nil, fmt.Errorf("server: %w", err)
 	}
-	rfs, err := rootfs.NewRootFS(c, st)
+	rfs, err = rootfs.NewRootFS(c, st)
 	if err != nil {
-		return nil, nil, fmt.Errorf("server: %w", err)
+		return nil, nil, nil, fmt.Errorf("server: %w", err)
 	}
-	nsvc, err := network.New(c)
+	nsvc, err = network.New(c)
 	if err != nil {
-		return nil, nil, fmt.Errorf("server: %w", err)
+		return nil, nil, nil, fmt.Errorf("server: %w", err)
 	}
+	return rt, rfs, nsvc, nil
+}
 
+// New builds the gRPC server and the listener for
+// cfg.GRPC.ListenAddress, serving rt/rfs/nsvc (see NewServices).
+func New(c *cfg.Settings, rt *runtime.Runtime, rfs *rootfs.RootFS, nsvc *network.Network) (*grpc.Server, net.Listener, error) {
 	isTCP, lis, err := listen(c.GRPC.ListenAddress)
 	if err != nil {
 		return nil, nil, fmt.Errorf("server: %w", err)
